@@ -1,0 +1,195 @@
+.register-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px;
+}
+
+.register-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-width: 1200px;
+  width: 100%;
+  background: white;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.register-brand {
+  background: linear-gradient(135deg, #1E88E5 0%, #0d47a1 100%);
+  padding: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.register-form-section {
+  padding: 48px;
+  background: white;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.required-star {
+  color: #f44336;
+  margin-left: 4px;
+}
+
+.password-wrapper {
+  position: relative;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #1E88E5;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px;
+}
+
+.password-hint {
+  font-size: 11px;
+  color: #999;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.terms-group {
+  margin-bottom: 24px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+}
+
+.checkbox-label input {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.checkbox-label a {
+  color: #1E88E5;
+  text-decoration: none;
+}
+
+.checkbox-label a:hover {
+  text-decoration: underline;
+}
+
+.register-button {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #1E88E5, #0d47a1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 24px;
+}
+
+.register-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(30, 136, 229, 0.4);
+}
+
+.register-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-link {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.login-link button {
+  background: none;
+  border: none;
+  color: #1E88E5;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-link button:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar styling */
+.register-form-section::-webkit-scrollbar {
+  width: 8px;
+}
+
+.register-form-section::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.register-form-section::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.register-form-section::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .register-grid {
+    grid-template-columns: 1fr;
+    max-width: 550px;
+  }
+  
+  .register-brand {
+    padding: 32px;
+  }
+  
+  .register-form-section {
+    padding: 32px;
+  }
+  
+  .register-container {
+    padding: 20px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .register-form-section {
+    padding: 24px;
+  }
+  
+  .form-header h2 {
+    font-size: 24px;
+  }
+}
