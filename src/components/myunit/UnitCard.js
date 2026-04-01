@@ -1,0 +1,59 @@
+function UnitCard({ unit, onClick, onScheduleService, onViewHistory }) {
+  const getStatusClass = () => {
+    switch(unit.status) {
+      case 'Good': return 'status-good';
+      case 'Needs Service': return 'status-needs-service';
+      case 'Critical': return 'status-critical';
+      default: return '';
+    }
+  };
+
+  return (
+    <div className="unit-card" onClick={() => onClick(unit)}>
+      <div className="unit-header">
+        <div className="unit-brand-model">
+          {unit.brand} {unit.model}
+        </div>
+        <div className="unit-icon">❄️</div>
+      </div>
+      <div className="unit-body">
+        <div className="unit-info">
+          <div className="info-row">
+            <span className="info-label">Serial Number</span>
+            <span className="info-value">{unit.serialNumber}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Installation Date</span>
+            <span className="info-value">{unit.installationDate}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Status</span>
+            <span className={`unit-status ${getStatusClass()}`}>{unit.status}</span>
+          </div>
+        </div>
+      </div>
+      <div className="unit-footer">
+        <button 
+          className="unit-btn service-btn" 
+          onClick={(e) => {
+            e.stopPropagation();
+            onScheduleService(unit);
+          }}
+        >
+          Schedule Service
+        </button>
+        <button 
+          className="unit-btn history-btn" 
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewHistory(unit);
+          }}
+        >
+          Service History
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default UnitCard;

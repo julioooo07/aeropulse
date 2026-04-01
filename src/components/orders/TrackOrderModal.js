@@ -1,0 +1,71 @@
+function TrackOrderModal({ order, onClose }) {
+  const steps = [
+    { label: 'Order Placed', status: 'completed', date: order.date },
+    { label: 'Processing', status: order.status === 'pending' ? 'pending' : 'completed', date: order.status !== 'pending' ? order.date : null },
+    { label: 'Shipped', status: order.status === 'shipped' || order.status === 'delivered' ? 'completed' : order.status === 'processing' ? 'pending' : 'upcoming', date: order.status === 'shipped' ? order.date : null },
+    { label: 'Delivered', status: order.status === 'delivered' ? 'completed' : 'upcoming', date: order.status === 'delivered' ? order.estimatedDelivery : null }
+  ];
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="address-modal order-details-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Track Order</h3>
+          <button className="close-modal" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="tracking-info">
+            <div>Order ID: <strong>{order.id}</strong></div>
+            <div>Tracking #: <div className="tracking-number">{order.trackingNumber}</div></div>
+            <div>Estimated Delivery: <span className="delivery-date">{order.estimatedDelivery}</span></div>
+          </div>
+
+          <div style={{ marginTop: '20px' }}>
+            <h4>Order Status</h4>
+            <div style={{ marginTop: '15px' }}>
+              {steps.map((step, idx) => (
+                <div key={idx} style={{ display: 'flex', marginBottom: '15px', alignItems: 'center' }}>
+                  <div style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    background: step.status === 'completed' ? '#4CAF50' : step.status === 'pending' ? '#FF9800' : '#e0e0e0',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '15px'
+                  }}>
+                    {step.status === 'completed' ? '✓' : step.status === 'pending' ? '●' : '○'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 'bold' }}>{step.label}</div>
+                    {step.date && <div style={{ fontSize: '12px', color: '#999' }}>{new Date(step.date).toLocaleDateString()}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="delivery-address" style={{ marginTop: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '12px' }}>
+            <h4>Delivery Address</h4>
+            <p><strong>{order.address.name}</strong></p>
+            <p>{order.address.street}</p>
+            <p>{order.address.city}, {order.address.postalCode}</p>
+            <p>📞 {order.address.phone}</p>
+          </div>
+
+          <div style={{ marginTop: '20px' }}>
+            <h4>Payment Method</h4>
+            <p>{order.paymentMethod === 'cod' ? 'Cash on Delivery' : order.paymentMethod === 'gcash' ? 'GCash' : 'Credit/Debit Card'}</p>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="confirm-btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default TrackOrderModal;

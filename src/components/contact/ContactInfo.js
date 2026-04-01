@@ -1,0 +1,30 @@
+function ContactInfo() {
+  const contactItems = [
+    { icon: '📞', title: 'Phone Number', details: ['+65 6760 0083', '+65 9123 4567'] },
+    { icon: '✉️', title: 'Email Address', details: ['info@coldair.com.sg', 'support@coldair.com.sg'] },
+    { icon: '🌐', title: 'Website', details: ['www.coldair.com.sg'] },
+    { icon: '📍', title: 'Address', details: ['192 Pandan Loop #06-29', 'Singapore 128381'] }
+  ];
+
+  return (
+    <div className="info-section">
+      <h2>Contact Information</h2>
+      <p>Reach out to us through any of these channels. Our team is ready to assist you.</p>
+      <div className="contact-details">
+        {contactItems.map((item, index) => (
+          <div key={index} className="contact-item">
+            <div className="contact-icon">{item.icon}</div>
+            <div className="contact-text">
+              <h4>{item.title}</h4>
+              {item.details.map((detail, i) => (
+                <p key={i}>{detail}</p>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default ContactInfo;

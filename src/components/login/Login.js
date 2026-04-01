@@ -27,15 +27,19 @@ function Login({ onLogin }) {
 
   const getUsers = useCallback(() => {
     const savedUsers = localStorage.getItem('aeropulse_users');
+    console.log('Getting users from localStorage:', savedUsers);
     return savedUsers ? JSON.parse(savedUsers) : [];
   }, []);
 
   const retrieveUser = useCallback((email) => {
     const users = getUsers();
-    return users.find(u => u.email === email) || null;
+    const found = users.find(u => u.email === email);
+    console.log('Looking for email:', email, 'Found:', found);
+    return found || null;
   }, [getUsers]);
 
   const setCurrent = useCallback((userData) => {
+    console.log('Setting current user:', userData);
     localStorage.setItem('currentUser', JSON.stringify(userData));
   }, []);
 
@@ -168,9 +172,11 @@ function Login({ onLogin }) {
   };
 
   const authenticateUser = async () => {
+    console.log('Starting authentication...');
     setErrors({});
     setLoading(true);
 
+    // Check for empty fields
     for (const [k, v] of Object.entries(user)) {
       if (k !== 'role' && (!v || v.length < 1)) {
         setErrors(prev => ({ ...prev, [k]: 'This field is required' }));
@@ -180,6 +186,7 @@ function Login({ onLogin }) {
       }
     }
 
+    console.log('Checking lockout for:', user.email);
     const lockoutCheck = canAttemptLogin(user.email);
     if (!lockoutCheck.canLogin) {
       alert(`Too many failed attempts! Account locked for ${lockoutCheck.secondsLeft} seconds.`);
@@ -205,9 +212,12 @@ function Login({ onLogin }) {
       return;
     }
 
+    console.log('Retrieving user:', user.email);
     const valid = retrieveUser(user.email);
+    console.log('Retrieved user:', valid);
     
     if (!valid) {
+      console.log('User not found');
       const result = await handleLoginAttempt(user.email, false);
       if (result.locked) {
         alert(`Too many failed attempts! Account locked for ${result.lockoutTime} seconds.`);
@@ -236,7 +246,9 @@ function Login({ onLogin }) {
       return;
     }
 
+    console.log('Comparing passwords - Stored:', valid.password, 'Entered:', user.password);
     if (valid.password !== user.password) {
+      console.log('Password mismatch');
       const result = await handleLoginAttempt(user.email, false);
       if (result.locked) {
         alert(`Too many failed attempts! Account locked for ${result.lockoutTime} seconds.`);
@@ -265,11 +277,13 @@ function Login({ onLogin }) {
       return;
     }
 
+    console.log('Login successful!');
     await handleLoginAttempt(user.email, true);
     setCurrent({ ...valid, role: user.role });
     if (timerRef.current) clearInterval(timerRef.current);
     
     setLoading(false);
+    console.log('Calling onLogin prop');
     onLogin();
   };
 
