@@ -1,23 +1,60 @@
 function OfficeLocations() {
   const locations = [
-    { country: 'Singapore', office: 'Head Office', address: '192 Pandan Loop, Singapore' },
-    { country: 'Indonesia', office: 'Jakarta Office', address: 'Jl. Sudirman No. 123, Jakarta' },
-    { country: 'Malaysia', office: 'Kuala Lumpur', address: 'KL Sentral, Kuala Lumpur' },
-    { country: 'Thailand', office: 'Bangkok Office', address: 'Sukhumvit Road, Bangkok' },
-    { country: 'Vietnam', office: 'Ho Chi Minh', address: 'District 1, Ho Chi Minh City' },
-    { country: 'Philippines', office: 'Manila Office', address: 'Makati City, Manila' }
+    { 
+      country: 'Philippines', 
+      office: 'Bulacan (Main Branch)', 
+      address: 'Plaridel, Bulacan',
+      isMain: true,
+      contact: '+63 912 345 6789'
+    },
+    { 
+      country: 'Philippines', 
+      office: 'Cavite Branch', 
+      address: 'Dasmariñas, Cavite',
+      isMain: false,
+      contact: '+63 923 456 7890'
+    },
+    { 
+      country: 'Philippines', 
+      office: 'Laguna Branch', 
+      address: 'Cabuyao City, Laguna',
+      isMain: false,
+      contact: '+63 934 567 8901'
+    },
+    { 
+      country: 'Philippines', 
+      office: 'Bataan Branch', 
+      address: 'Balanga City, Bataan',
+      isMain: false,
+      contact: '+63 945 678 9012'
+    },
+    { 
+      country: 'Philippines', 
+      office: 'Pangasinan Branch', 
+      address: 'Dagupan City, Pangasinan',
+      isMain: false,
+      contact: '+63 956 789 0123'
+    },
+    { 
+      country: 'Philippines', 
+      office: 'Ilocos Branch', 
+      address: 'San Fernando City, La Union',
+      isMain: false,
+      contact: '+63 967 890 1234'
+    }
   ];
 
   return (
     <div className="locations-section">
       <h3>Our Offices</h3>
-      <p>Serving customers across Southeast Asia with dedicated local offices.</p>
+      <p>Serving customers across Luzon with dedicated local branches.</p>
       <div className="locations-grid">
         {locations.map((loc, index) => (
-          <div key={index} className="location-card">
-            <div className="location-country">{loc.country}</div>
+          <div key={index} className={`location-card ${loc.isMain ? 'main-branch' : ''}`}>
+            {loc.isMain && <div className="main-badge">★ Main Branch</div>}
             <div className="location-office">{loc.office}</div>
-            <div style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>{loc.address}</div>
+            <div className="location-address">{loc.address}</div>
+            <div className="location-contact">📞 {loc.contact}</div>
           </div>
         ))}
       </div>

@@ -16,7 +16,19 @@ function ProductModal({ product, onClose, onAddToCart }) {
         <button className="close-modal-btn" onClick={onClose}>×</button>
         <div className="modal-content">
           <div className="modal-image">
-            {product.icon}
+            {product.imageUrl ? (
+              <img 
+                src={product.imageUrl} 
+                alt={product.name}
+                className="modal-product-img"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentElement.innerHTML = `<span class="modal-product-fallback">${product.icon || '❄️'}</span>`;
+                }}
+              />
+            ) : (
+              <span className="modal-product-fallback">{product.icon || '❄️'}</span>
+            )}
           </div>
           <div className="modal-details">
             <h2>{product.name}</h2>
@@ -30,7 +42,7 @@ function ProductModal({ product, onClose, onAddToCart }) {
             <p className="modal-description">{product.description}</p>
             <ul className="modal-specs">
               <li><span className="spec-label">Model:</span><span>{product.model}</span></li>
-              <li><span className="spec-label">Capacity:</span><span>{product.capacity}</span></li>
+              <li><span className="spec-label">Capacity:</span><span>{product.specs || product.capacity}</span></li>
               <li><span className="spec-label">Energy Rating:</span><span>{product.energyRating}</span></li>
               <li><span className="spec-label">Warranty:</span><span>{product.warranty}</span></li>
             </ul>

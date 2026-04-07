@@ -1,9 +1,14 @@
 import { useState } from 'react';
+import { useUser } from '../../context/UserContext';
+import { useNavigate } from 'react-router-dom';
 import './Register.css';
 import RegisterBrandSection from './RegisterBrandSection';
 import RegisterForm from './RegisterForm';
 
 function Register() {
+  const { register } = useUser();
+  const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -12,7 +17,8 @@ function Register() {
     password: '',
     confirmPassword: '',
     role: 'customer',
-    agreeTerms: false
+    agreeTerms: false,
+    address: '' // Added address field
   });
   
   const [errors, setErrors] = useState({});
@@ -46,11 +52,16 @@ function Register() {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Phone validation
+    // Phone validation (Philippines format)
     if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
-    } else if (!/^[0-9]{10,11}$/.test(formData.phone.replace(/\D/g, ''))) {
-      newErrors.phone = 'Please enter a valid phone number (10-11 digits)';
+    } else {
+      const cleanPhone = formData.phone.replace(/\D/g, '');
+      if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+        newErrors.phone = 'Please enter a valid phone number (10-11 digits)';
+      } else if (!cleanPhone.startsWith('09') && !cleanPhone.startsWith('639')) {
+        newErrors.phone = 'Please enter a valid Philippine mobile number (starts with 09 or 639)';
+      }
     }
 
     // Password validation
@@ -84,38 +95,6 @@ function Register() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const checkExistingUser = (email) => {
-    const users = localStorage.getItem('aeropulse_users');
-    if (users) {
-      const parsedUsers = JSON.parse(users);
-      return parsedUsers.find(user => user.email === email);
-    }
-    return null;
-  };
-
-  const saveUser = (userData) => {
-    const users = localStorage.getItem('aeropulse_users');
-    let allUsers = users ? JSON.parse(users) : [];
-    
-    const newUser = {
-      id: Date.now(),
-      name_first: userData.firstName,
-      name_last: userData.lastName,
-      email: userData.email,
-      phone: userData.phone,
-      password: userData.password,
-      role: userData.role,
-      isGoogleAccount: false,
-      profilePhoto: '',
-      createdAt: new Date().toISOString()
-    };
-    
-    allUsers.push(newUser);
-    localStorage.setItem('aeropulse_users', JSON.stringify(allUsers));
-    
-    return newUser;
-  };
-
   const handleFieldChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
     if (errors[field]) {
@@ -130,27 +109,31 @@ function Register() {
     
     setLoading(true);
     
-    // Check if user already exists
-    const existingUser = checkExistingUser(formData.email);
-    if (existingUser) {
-      setErrors({ ...errors, email: 'An account with this email already exists' });
+    try {
+      // Register user using UserContext
+      await register({
+        name: `${formData.firstName} ${formData.lastName}`,
+        name_first: formData.firstName,
+        name_last: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: formData.role,
+        address: formData.address || '',
+        agreeTerms: formData.agreeTerms
+      });
+      
+      // Show success message
+      alert('Registration successful! Welcome to Cold Air!');
+      
+      // Navigate to home page (user is automatically logged in)
+      navigate('/home');
+    } catch (err) {
+      setErrors({ ...errors, email: err.message });
+      alert(err.message);
+    } finally {
       setLoading(false);
-      return;
     }
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Save user
-    saveUser(formData);
-    
-    setLoading(false);
-    
-    // Show success message and redirect to login
-    alert('Registration successful! Please login with your credentials.');
-    
-    // Redirect to login page
-    window.location.href = '/login';
   };
 
   return (

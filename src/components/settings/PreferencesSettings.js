@@ -1,17 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-function PreferencesSettings() {
+function PreferencesSettings({ onDarkModeChange, darkMode }) {
   const [preferences, setPreferences] = useState({
     language: 'English',
-    currency: 'SGD',
-    timezone: 'Asia/Singapore',
-    darkMode: false,
+    currency: 'PHP',
+    timezone: 'Asia/Manila',
     autoBook: true
   });
 
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('userPreferences');
+    if (savedPreferences) {
+      const parsed = JSON.parse(savedPreferences);
+      setPreferences(prev => ({ ...prev, ...parsed }));
+    }
+  }, []);
+
   const handlePreferenceChange = (key, value) => {
-    setPreferences({ ...preferences, [key]: value });
-    alert(`${key} updated to ${value}`);
+    const newPreferences = { ...preferences, [key]: value };
+    setPreferences(newPreferences);
+    localStorage.setItem('userPreferences', JSON.stringify(newPreferences));
+    
+    if (key === 'darkMode') {
+      onDarkModeChange(value);
+    }
+    
+    // Show success message without alert for better UX
+    showToast(`${key} updated to ${value}`);
+  };
+
+  const showToast = (message) => {
+    // Create a temporary toast notification
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      z-index: 2000;
+      animation: fadeInOut 2s ease;
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
   };
 
   return (
@@ -32,25 +67,23 @@ function PreferencesSettings() {
             className="setting-select"
           >
             <option value="English">English</option>
+            <option value="Filipino">Filipino</option>
             <option value="Chinese">Chinese</option>
-            <option value="Malay">Malay</option>
-            <option value="Tamil">Tamil</option>
           </select>
         </div>
 
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Currency</div>
-            <div className="setting-description">Display currency format</div>
+            <div className="setting-description">Display currency format (Fixed: Philippine Peso)</div>
           </div>
           <select
             value={preferences.currency}
-            onChange={(e) => handlePreferenceChange('currency', e.target.value)}
             className="setting-select"
+            disabled
+            style={{ opacity: 0.7, cursor: 'not-allowed' }}
           >
-            <option value="SGD">SGD ($)</option>
-            <option value="USD">USD ($)</option>
-            <option value="MYR">MYR (RM)</option>
+            <option value="PHP">Philippine Peso (₱)</option>
           </select>
         </div>
 
@@ -64,19 +97,23 @@ function PreferencesSettings() {
             onChange={(e) => handlePreferenceChange('timezone', e.target.value)}
             className="setting-select"
           >
-            <option value="Asia/Singapore">Singapore (GMT+8)</option>
-            <option value="Asia/Kuala_Lumpur">Kuala Lumpur (GMT+8)</option>
-            <option value="Asia/Jakarta">Jakarta (GMT+7)</option>
+            <option value="Asia/Manila">Manila (GMT+8)</option>
+            <option value="Asia/Cebu">Cebu (GMT+8)</option>
+            <option value="Asia/Davao">Davao (GMT+8)</option>
           </select>
         </div>
 
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Dark Mode</div>
-            <div className="setting-description">Switch to dark theme</div>
+            <div className="setting-description">Switch to dark theme for the entire website</div>
           </div>
           <label className="toggle-switch">
-            <input type="checkbox" checked={preferences.darkMode} onChange={() => handlePreferenceChange('darkMode', !preferences.darkMode)} />
+            <input 
+              type="checkbox" 
+              checked={darkMode} 
+              onChange={() => handlePreferenceChange('darkMode', !darkMode)} 
+            />
             <span className="toggle-slider"></span>
           </label>
         </div>

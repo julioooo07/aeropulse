@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useUser } from '../../context/UserContext';
+import { useNavigate } from 'react-router-dom';
 import './Login.css';
 import LoginBrandSection from './LoginBrandSection';
 import LoginForm from './LoginForm';
@@ -6,7 +8,10 @@ import RoleSelector from './RoleSelector';
 import LockoutWarning from './LockOutWarning';
 import GoogleButton from './GoogleButton';
 
-function Login({ onLogin }) {
+function Login() {
+  const { login, loginAsAdmin, loginAsTechnician, register, getUserByEmail } = useUser();
+  const navigate = useNavigate();
+  
   const [user, setUser] = useState({
     email: '',
     password: '',
@@ -21,27 +26,10 @@ function Login({ onLogin }) {
   const timerRef = useRef(null);
 
   const roles = [
-    { id: 'customer', label: 'Customer', icon: '👤' },
-    { id: 'technician', label: 'Technician', icon: '🔧' }
+    { id: 'customer', label: 'Customer', icon: '👤', redirectTo: '/home' },
+    { id: 'technician', label: 'Technician', icon: '🔧', redirectTo: '/tech/dashboard' },
+    { id: 'admin', label: 'Admin', icon: '👨‍💼', redirectTo: '/admin/dashboard' }
   ];
-
-  const getUsers = useCallback(() => {
-    const savedUsers = localStorage.getItem('aeropulse_users');
-    console.log('Getting users from localStorage:', savedUsers);
-    return savedUsers ? JSON.parse(savedUsers) : [];
-  }, []);
-
-  const retrieveUser = useCallback((email) => {
-    const users = getUsers();
-    const found = users.find(u => u.email === email);
-    console.log('Looking for email:', email, 'Found:', found);
-    return found || null;
-  }, [getUsers]);
-
-  const setCurrent = useCallback((userData) => {
-    console.log('Setting current user:', userData);
-    localStorage.setItem('currentUser', JSON.stringify(userData));
-  }, []);
 
   const getFailedAttempts = useCallback((email) => {
     const attempts = localStorage.getItem(`failed_attempts_${email}`);
@@ -166,13 +154,15 @@ function Login({ onLogin }) {
       return;
     }
     
-    if (window.confirm(`A password reset link will be sent to:\n${user.email}`)) {
-      alert('Reset link sent! Check your email for password reset instructions.');
+    const existingUser = getUserByEmail(user.email);
+    if (existingUser) {
+      alert(`Password reset link sent to:\n${user.email}\n\nDemo reset token: reset_${Date.now()}`);
+    } else {
+      alert('No account found with this email address.');
     }
   };
 
   const authenticateUser = async () => {
-    console.log('Starting authentication...');
     setErrors({});
     setLoading(true);
 
@@ -186,7 +176,7 @@ function Login({ onLogin }) {
       }
     }
 
-    console.log('Checking lockout for:', user.email);
+    // Check lockout
     const lockoutCheck = canAttemptLogin(user.email);
     if (!lockoutCheck.canLogin) {
       alert(`Too many failed attempts! Account locked for ${lockoutCheck.secondsLeft} seconds.`);
@@ -212,13 +202,44 @@ function Login({ onLogin }) {
       return;
     }
 
-    console.log('Retrieving user:', user.email);
-    const valid = retrieveUser(user.email);
-    console.log('Retrieved user:', valid);
-    
-    if (!valid) {
-      console.log('User not found');
+    try {
+      console.log('Attempting login for:', user.email, 'with role:', user.role);
+      
+      let loggedInUser;
+      
+      // Use different login methods based on selected role
+      switch(user.role) {
+        case 'admin':
+          loggedInUser = await loginAsAdmin(user.email, user.password);
+          break;
+        case 'technician':
+          loggedInUser = await loginAsTechnician(user.email, user.password);
+          break;
+        default:
+          loggedInUser = await login(user.email, user.password);
+      }
+      
+      console.log('Login successful:', loggedInUser);
+      
+      // Store user with role in session
+      const userWithRole = { ...loggedInUser, selectedRole: user.role };
+      localStorage.setItem('currentUser', JSON.stringify(userWithRole));
+      
+      await handleLoginAttempt(user.email, true);
+      if (timerRef.current) clearInterval(timerRef.current);
+      
+      setLoading(false);
+      
+      // Redirect based on role
+      const selectedRoleConfig = roles.find(r => r.id === user.role);
+      navigate(selectedRoleConfig.redirectTo);
+      
+    } catch (err) {
+      console.error('Login error details:', err);
+      
+      // Handle failed login
       const result = await handleLoginAttempt(user.email, false);
+      
       if (result.locked) {
         alert(`Too many failed attempts! Account locked for ${result.lockoutTime} seconds.`);
         setLockoutInfo({
@@ -239,88 +260,58 @@ function Login({ onLogin }) {
           });
         }, 1000);
       } else {
-        setErrors(prev => ({ ...prev, email: 'Invalid credentials' }));
-        alert(`Invalid email or password! Attempts: ${result.attempts}/3`);
+        setErrors(prev => ({ ...prev, password: err.message || 'Invalid credentials' }));
+        alert(`${err.message || 'Invalid email or password!'} Attempts: ${result.attempts}/3`);
       }
       setLoading(false);
-      return;
     }
-
-    console.log('Comparing passwords - Stored:', valid.password, 'Entered:', user.password);
-    if (valid.password !== user.password) {
-      console.log('Password mismatch');
-      const result = await handleLoginAttempt(user.email, false);
-      if (result.locked) {
-        alert(`Too many failed attempts! Account locked for ${result.lockoutTime} seconds.`);
-        setLockoutInfo({
-          message: `Account locked. Try again in ${result.lockoutTime} seconds.`,
-          secondsLeft: result.lockoutTime
-        });
-        setSecondsLeft(result.lockoutTime);
-        
-        if (timerRef.current) clearInterval(timerRef.current);
-        timerRef.current = setInterval(() => {
-          setSecondsLeft(prev => {
-            if (prev <= 1) {
-              clearInterval(timerRef.current);
-              setLockoutInfo(null);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-      } else {
-        setErrors(prev => ({ ...prev, password: 'Invalid credentials' }));
-        alert(`Invalid email or password! Attempts: ${result.attempts}/3`);
-      }
-      setLoading(false);
-      return;
-    }
-
-    console.log('Login successful!');
-    await handleLoginAttempt(user.email, true);
-    setCurrent({ ...valid, role: user.role });
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    setLoading(false);
-    console.log('Calling onLogin prop');
-    onLogin();
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    setTimeout(() => {
+    
+    setTimeout(async () => {
+      const googleEmail = `google_${Date.now()}@example.com`;
       const googleUserData = {
-        email: 'googleuser@example.com',
         name_first: 'Google',
         name_last: 'User',
-        profilePhoto: '',
-        isGoogleAccount: true
+        email: googleEmail,
+        phone: '',
+        password: 'google_auth_' + Date.now(),
+        isGoogleAccount: true,
+        address: ''
       };
-      const existingUser = retrieveUser(googleUserData.email);
+      
+      const existingUser = getUserByEmail(googleEmail);
       
       if (existingUser) {
-        setCurrent({ ...existingUser, role: user.role });
-        onLogin();
+        try {
+          let loggedInUser;
+          switch(user.role) {
+            case 'admin':
+              loggedInUser = await loginAsAdmin(googleEmail, googleUserData.password);
+              break;
+            case 'technician':
+              loggedInUser = await loginAsTechnician(googleEmail, googleUserData.password);
+              break;
+            default:
+              loggedInUser = await login(googleEmail, googleUserData.password);
+          }
+          const userWithRole = { ...loggedInUser, role: user.role };
+          localStorage.setItem('currentUser', JSON.stringify(userWithRole));
+          const selectedRoleConfig = roles.find(r => r.id === user.role);
+          navigate(selectedRoleConfig.redirectTo);
+        } catch (err) {
+          alert('Google login failed: ' + err.message);
+        }
       } else {
-        const newUser = {
-          id: Date.now(),
-          name_first: googleUserData.name_first,
-          name_last: googleUserData.name_last,
-          email: googleUserData.email,
-          phone: '',
-          password: 'google_auth_' + Date.now(),
-          profilePhoto: googleUserData.profilePhoto,
-          isGoogleAccount: true,
-          role: user.role,
-          createdAt: new Date().toISOString()
-        };
-        
-        const users = getUsers();
-        users.push(newUser);
-        localStorage.setItem('aeropulse_users', JSON.stringify(users));
-        setCurrent(newUser);
-        onLogin();
+        try {
+          await register(googleUserData, user.role);
+          const selectedRoleConfig = roles.find(r => r.id === user.role);
+          navigate(selectedRoleConfig.redirectTo);
+        } catch (err) {
+          alert('Google registration failed: ' + err.message);
+        }
       }
       setGoogleLoading(false);
     }, 1000);
@@ -329,12 +320,11 @@ function Login({ onLogin }) {
   const handleClearLockout = () => {
     if (user.email) {
       clearLockout(user.email);
-      alert('Lockout cleared. You can now attempt to login again.');
     }
   };
 
   const handleSignUp = () => {
-    window.location.href = '/register';
+    navigate('/register');
   };
 
   const selectedRole = roles.find(r => r.id === user.role) || roles[0];
@@ -393,8 +383,11 @@ function Login({ onLogin }) {
             <div className="tips-list">
               <span>• 3 login attempts before temporary lockout</span>
               <span>• Lockout duration increases with failed attempts</span>
-              <span>• Google Sign-in creates account automatically</span>
-              <span>• All data is stored locally on your device</span>
+              <span>• Demo Accounts Available:</span>
+              <span>  - Customer: demo@example.com / demo123</span>
+              <span>  - Technician: tech@example.com / tech123</span>
+              <span>  - Admin: admin@example.com / admin123</span>
+              <span>  - Super Admin: superadmin@example.com / super123</span>
             </div>
           </div>
         </div>

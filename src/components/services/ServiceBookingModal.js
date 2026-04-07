@@ -32,6 +32,14 @@ function ServiceBookingModal({ service, onClose, onConfirm }) {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // Calculate total price
+  const getTotalPrice = () => {
+    let extra = 0;
+    if (bookingData.technician === 'senior') extra = 200;
+    if (bookingData.technician === 'express') extra = 500;
+    return service.price + extra;
+  };
+
   return (
     <div className="booking-modal-overlay" onClick={onClose}>
       <div className="booking-modal" onClick={(e) => e.stopPropagation()}>
@@ -39,70 +47,91 @@ function ServiceBookingModal({ service, onClose, onConfirm }) {
           <h3>Book Service</h3>
           <button className="close-modal" onClick={onClose}>×</button>
         </div>
+        
         <div className="modal-body">
+          {/* Service Info */}
           <div className="booking-info">
             <div className="booking-info-item">
               <span className="booking-label">Service:</span>
               <span className="booking-value">{service.name}</span>
             </div>
             <div className="booking-info-item">
-              <span className="booking-label">Price:</span>
-              <span className="booking-value">₱{service.price.toLocaleString()}</span>
-            </div>
-            <div className="booking-info-item">
               <span className="booking-label">Duration:</span>
               <span className="booking-value">{service.duration}</span>
             </div>
+            <div className="booking-info-item">
+              <span className="booking-label">Base Price:</span>
+              <span className="booking-value">₱{service.price.toLocaleString()}</span>
+            </div>
+            <div className="booking-info-item">
+              <span className="booking-label">Warranty:</span>
+              <span className="booking-value warranty-value">🔒 {service.warranty}</span>
+            </div>
           </div>
 
+          {/* Date Selection */}
           <div className="form-group">
-            <label>Select Date *</label>
+            <label>Select Date <span className="required">*</span></label>
             <input
               type="date"
               min={today}
               value={bookingData.date}
               onChange={(e) => setBookingData({ ...bookingData, date: e.target.value })}
+              className={errors.date ? 'error' : ''}
             />
-            {errors.date && <div style={{ color: '#f44336', fontSize: '12px', marginTop: '5px' }}>{errors.date}</div>}
+            {errors.date && <div className="error-message">{errors.date}</div>}
           </div>
 
+          {/* Time Selection */}
           <div className="form-group">
-            <label>Select Time *</label>
+            <label>Select Time <span className="required">*</span></label>
             <select
               value={bookingData.time}
               onChange={(e) => setBookingData({ ...bookingData, time: e.target.value })}
+              className={errors.time ? 'error' : ''}
             >
               <option value="">Select time slot</option>
               {timeSlots.map(slot => (
                 <option key={slot} value={slot}>{slot}</option>
               ))}
             </select>
-            {errors.time && <div style={{ color: '#f44336', fontSize: '12px', marginTop: '5px' }}>{errors.time}</div>}
+            {errors.time && <div className="error-message">{errors.time}</div>}
           </div>
 
+          {/* Address */}
           <div className="form-group">
-            <label>Address *</label>
+            <label>Service Address <span className="required">*</span></label>
             <textarea
               rows="3"
               placeholder="Enter your complete address"
               value={bookingData.address}
               onChange={(e) => setBookingData({ ...bookingData, address: e.target.value })}
+              className={errors.address ? 'error' : ''}
             />
-            {errors.address && <div style={{ color: '#f44336', fontSize: '12px', marginTop: '5px' }}>{errors.address}</div>}
+            {errors.address && <div className="error-message">{errors.address}</div>}
           </div>
 
+          {/* Technician Options */}
           <div className="form-group">
             <label>Preferred Technician</label>
             <select
               value={bookingData.technician}
               onChange={(e) => setBookingData({ ...bookingData, technician: e.target.value })}
             >
-              <option value="any">Any available technician</option>
-              <option value="senior">Senior technician (+₱200)</option>
-              <option value="express">Express service (+₱500)</option>
+              <option value="any">Any available technician (Included)</option>
+              <option value="senior">⭐ Senior Technician (+₱200)</option>
+              <option value="express">⚡ Express Service (+₱500)</option>
             </select>
+            {bookingData.technician !== 'any' && (
+              <div className="tech-note">
+                {bookingData.technician === 'senior' 
+                  ? '✓ Experienced technician with 5+ years experience' 
+                  : '✓ Priority dispatch within 2 hours'}
+              </div>
+            )}
           </div>
 
+          {/* Additional Notes */}
           <div className="form-group">
             <label>Additional Notes (Optional)</label>
             <textarea
@@ -113,9 +142,17 @@ function ServiceBookingModal({ service, onClose, onConfirm }) {
             />
           </div>
         </div>
+
+        {/* Footer with price summary */}
         <div className="modal-footer">
-          <button className="cancel-btn" onClick={onClose}>Cancel</button>
-          <button className="confirm-btn" onClick={handleSubmit}>Confirm Booking</button>
+          <div className="price-summary">
+            <span>Total Amount:</span>
+            <span className="total-price">₱{getTotalPrice().toLocaleString()}</span>
+          </div>
+          <div className="footer-buttons">
+            <button className="cancel-btn" onClick={onClose}>Cancel</button>
+            <button className="confirm-btn" onClick={handleSubmit}>Confirm Booking</button>
+          </div>
         </div>
       </div>
     </div>

@@ -70,11 +70,6 @@ function Contact() {
 
         <MapSection />
 
-        <div className="contact-footer">
-          <a href="https://www.coldair.com.sg" target="_blank" rel="noopener noreferrer" className="website-link">
-            www.coldair.com.sg
-          </a>
-        </div>
       </div>
     </div>
   );

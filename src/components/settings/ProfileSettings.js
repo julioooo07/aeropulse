@@ -1,18 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 function ProfileSettings({ user, onUpdateProfile }) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: user?.name || 'John Doe',
-    email: user?.email || 'john@example.com',
-    phone: user?.phone || '+65 9123 4567',
-    address: user?.address || 'Singapore'
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
   });
 
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || user.fullName || '',
+        email: user.email || '',
+        phone: user.phone || user.contactNumber || '',
+        address: user.address || ''
+      });
+    }
+  }, [user]);
+
   const handleSave = () => {
+    if (!formData.name.trim()) {
+      alert('Name is required!');
+      return;
+    }
+    if (!formData.email.trim()) {
+      alert('Email is required!');
+      return;
+    }
+    if (!formData.phone.trim()) {
+      alert('Phone number is required!');
+      return;
+    }
     onUpdateProfile(formData);
     setIsEditing(false);
     alert('Profile updated successfully!');
+  };
+
+  const handleInputChange = (field, value) => {
+    setFormData({ ...formData, [field]: value });
   };
 
   return (
@@ -25,90 +52,104 @@ function ProfileSettings({ user, onUpdateProfile }) {
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Full Name</div>
-            <div className="setting-description">Your display name</div>
+            <div className="setting-description">Your display name from registration</div>
           </div>
           {isEditing ? (
             <div className="edit-mode">
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleInputChange('name', e.target.value)}
                 className="setting-input"
+                placeholder="Enter your full name"
               />
             </div>
           ) : (
-            <div className="setting-value">{formData.name}</div>
+            <div className="setting-value">{formData.name || 'Not set'}</div>
           )}
         </div>
 
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Email Address</div>
-            <div className="setting-description">Your login email</div>
+            <div className="setting-description">Your login email from registration</div>
           </div>
           {isEditing ? (
             <div className="edit-mode">
               <input
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => handleInputChange('email', e.target.value)}
                 className="setting-input"
+                placeholder="Enter your email"
               />
             </div>
           ) : (
-            <div className="setting-value">{formData.email}</div>
+            <div className="setting-value">{formData.email || 'Not set'}</div>
           )}
         </div>
 
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Phone Number</div>
-            <div className="setting-description">Contact number</div>
+            <div className="setting-description">Your contact number from registration</div>
           </div>
           {isEditing ? (
             <div className="edit-mode">
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
                 className="setting-input"
+                placeholder="Enter your phone number"
               />
             </div>
           ) : (
-            <div className="setting-value">{formData.phone}</div>
+            <div className="setting-value">{formData.phone || 'Not set'}</div>
           )}
         </div>
 
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">Address</div>
-            <div className="setting-description">Your location</div>
+            <div className="setting-description">Your location (optional)</div>
           </div>
           {isEditing ? (
             <div className="edit-mode">
               <input
                 type="text"
                 value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                onChange={(e) => handleInputChange('address', e.target.value)}
                 className="setting-input"
+                placeholder="Enter your address (optional)"
               />
             </div>
           ) : (
-            <div className="setting-value">{formData.address}</div>
+            <div className="setting-value">{formData.address || 'Not provided'}</div>
           )}
         </div>
 
         {!isEditing ? (
           <div className="setting-item">
-            <button onClick={() => setIsEditing(true)} className="edit-btn" style={{ color: '#1E88E5' }}>
-              Edit Profile
+            <button onClick={() => setIsEditing(true)} className="edit-btn save-btn" style={{ color: '#1E88E5' }}>
+              ✎ Edit Profile
             </button>
           </div>
         ) : (
           <div className="setting-item">
             <div className="edit-buttons">
-              <button onClick={handleSave} className="edit-btn save-btn">✓ Save</button>
-              <button onClick={() => setIsEditing(false)} className="edit-btn cancel-btn">✗ Cancel</button>
+              <button onClick={handleSave} className="edit-btn save-btn">✓ Save Changes</button>
+              <button onClick={() => {
+                setIsEditing(false);
+                if (user) {
+                  setFormData({
+                    name: user.name || user.fullName || '',
+                    email: user.email || '',
+                    phone: user.phone || user.contactNumber || '',
+                    address: user.address || ''
+                  });
+                }
+              }} className="edit-btn cancel-btn">✗ Cancel</button>
             </div>
           </div>
         )}

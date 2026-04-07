@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Services.css';
-import ServiceCard from './ServiceCard';
-import ServiceFilters from './ServiceFilters';
 import ServiceBookingModal from './ServiceBookingModal';
 
 function Services() {
@@ -13,12 +11,10 @@ function Services() {
   const [showBookingModal, setShowBookingModal] = useState(false);
 
   const categories = [
-    { id: 'all', name: 'All Services' },
-    { id: 'maintenance', name: 'Maintenance' },
-    { id: 'repair', name: 'Repair' },
-    { id: 'installation', name: 'Installation' },
-    { id: 'warranty', name: 'Warranty' },
-    { id: 'consultation', name: 'Consultation' }
+    { id: 'all', name: 'All Services', count: 6 },
+    { id: 'maintenance', name: 'Maintenance', count: 2 },
+    { id: 'repair', name: 'Repair', count: 2 },
+    { id: 'cleaning', name: 'Cleaning', count: 2 }
   ];
 
   const services = [
@@ -26,12 +22,14 @@ function Services() {
       id: 1,
       name: 'Maintenance',
       icon: '🔧',
-      description: 'Regular check-ups and cleaning for your AC to ensure optimal performance and energy efficiency.',
+      description: 'Regular check-ups and servicing for your AC to ensure optimal performance and energy efficiency.',
       duration: '1-2 hours',
       technicians: 2,
       price: 899,
       category: 'maintenance',
-      popular: true
+      popular: true,
+      warranty: '3 months',
+      discount: '10% OFF'
     },
     {
       id: 2,
@@ -42,68 +40,61 @@ function Services() {
       technicians: 2,
       price: 1499,
       category: 'repair',
-      popular: true
+      popular: true,
+      warranty: '6 months',
+      discount: null
     },
     {
       id: 3,
-      name: 'Installation',
-      icon: '❄️',
-      description: 'Professional AC installation services with proper mounting, piping, and electrical connections.',
-      duration: '3-4 hours',
-      technicians: 2,
-      price: 2499,
-      category: 'installation'
+      name: 'Cleaning',
+      icon: '🧼',
+      description: 'Deep cleaning service to remove dirt, dust, mold, and bacteria from your AC unit.',
+      duration: '1.5 hours',
+      technicians: 1,
+      price: 599,
+      category: 'cleaning',
+      popular: false,
+      warranty: '1 month',
+      discount: '15% OFF'
     },
     {
       id: 4,
-      name: 'Warranty',
-      icon: '📜',
-      description: 'Extended warranty plans for peace of mind covering parts and labor for your AC unit.',
-      duration: '1 year',
-      technicians: 1,
-      price: 1999,
-      category: 'warranty'
-    },
-    {
-      id: 5,
-      name: 'Consultation',
-      icon: '💡',
-      description: 'Expert advice on choosing the right AC unit for your space, energy efficiency tips, and system optimization.',
-      duration: '1 hour',
-      technicians: 1,
-      price: 499,
-      category: 'consultation'
-    },
-    {
-      id: 6,
-      name: 'Chemical Cleaning',
-      icon: '🧪',
-      description: 'Deep chemical cleaning to remove stubborn dirt, mold, and bacteria from your AC unit.',
-      duration: '2 hours',
-      technicians: 2,
-      price: 1299,
-      category: 'maintenance'
-    },
-    {
-      id: 7,
-      name: 'Gas Top-up',
-      icon: '💨',
-      description: 'Refrigerant gas top-up service to restore cooling performance.',
-      duration: '1.5 hours',
-      technicians: 1,
-      price: 799,
-      category: 'repair'
-    },
-    {
-      id: 8,
       name: 'Emergency Repair',
       icon: '🚨',
-      description: '24/7 emergency repair service for urgent AC breakdowns.',
-      duration: '2-4 hours',
+      description: '24/7 emergency AC repair service for urgent issues. Same-day response guaranteed.',
+      duration: '2-3 hours',
       technicians: 2,
       price: 2499,
       category: 'repair',
-      popular: true
+      popular: false,
+      warranty: '3 months',
+      discount: null
+    },
+    {
+      id: 5,
+      name: 'Premium Maintenance',
+      icon: '⭐',
+      description: 'Comprehensive maintenance including filter replacement, coil cleaning, and performance tuning.',
+      duration: '2-3 hours',
+      technicians: 2,
+      price: 1299,
+      category: 'maintenance',
+      popular: true,
+      warranty: '6 months',
+      discount: '20% OFF'
+    },
+    {
+      id: 6,
+      name: 'Sanitization Service',
+      icon: '🦠',
+      description: 'Anti-bacterial and anti-viral sanitization for your AC unit. Improves air quality.',
+      duration: '1.5 hours',
+      technicians: 1,
+      price: 799,
+      category: 'cleaning',
+      popular: false,
+      warranty: '2 months',
+      discount: null
     }
   ];
 
@@ -117,24 +108,40 @@ function Services() {
   };
 
   const handleConfirmBooking = (service, bookingData) => {
-    const totalPrice = service.price + (bookingData.technician === 'senior' ? 200 : bookingData.technician === 'express' ? 500 : 0);
+    let technicianFee = 0;
+    let technicianLabel = '';
+    
+    if (bookingData.technician === 'senior') {
+      technicianFee = 200;
+      technicianLabel = 'Senior Technician';
+    } else if (bookingData.technician === 'express') {
+      technicianFee = 500;
+      technicianLabel = 'Express Service';
+    } else {
+      technicianLabel = 'Standard Technician';
+    }
+    
+    const totalPrice = service.price + technicianFee;
     
     const bookingDetails = {
       ...bookingData,
       service: service.name,
-      price: service.price,
+      basePrice: service.price,
+      technicianFee: technicianFee,
+      technicianLabel: technicianLabel,
       totalPrice: totalPrice,
       bookingId: Date.now(),
-      status: 'pending'
+      status: 'pending',
+      warranty: service.warranty
     };
     
-    // Save booking to localStorage
     const existingBookings = localStorage.getItem('bookings');
     const bookings = existingBookings ? JSON.parse(existingBookings) : [];
     bookings.push(bookingDetails);
     localStorage.setItem('bookings', JSON.stringify(bookings));
     
-    alert(`Booking confirmed for ${service.name} on ${bookingData.date} at ${bookingData.time}\nTotal: ₱${totalPrice.toLocaleString()}`);
+    alert(`✅ Booking Confirmed!\n\nService: ${service.name}\nDate: ${bookingData.date}\nTime: ${bookingData.time}\nTechnician: ${technicianLabel}\nTotal: ₱${totalPrice.toLocaleString()}\n\nWarranty: ${service.warranty}\nBooking ID: #${bookingDetails.bookingId}`);
+    
     setShowBookingModal(false);
     setSelectedService(null);
   };
@@ -159,59 +166,125 @@ function Services() {
   const filteredServices = getFilteredServices();
 
   return (
-    <div className="services-page-container">
-      <div className="services-header">
+    <div className="services-page">
+      {/* Header with back button - similar to Shop AC Units */}
+      <div className="services-header-container">
         <div className="services-header-content">
-          <div className="services-header-left">
-            <button className="back-btn" onClick={handleBack}>←</button>
-            <h1 className="services-title">AC Services</h1>
+          <button className="back-button" onClick={handleBack}>
+            ← Back
+          </button>
+          <div className="services-header-title">
+            <h1>Warranty Services</h1>
+            <p>Professional AC care backed by warranty</p>
           </div>
         </div>
       </div>
 
-      <main className="services-main">
-        <div className="services-hero">
-          <h1>Professional AC Services</h1>
-          <p>Expert technicians ready to serve you with quality and reliability</p>
-          <div className="services-hero-stats">
-            <div className="stat-item">
-              <span className="stat-number">5000+</span>
-              <span className="stat-label">Services Done</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">98%</span>
-              <span className="stat-label">Satisfaction Rate</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">24/7</span>
-              <span className="stat-label">Support</span>
+      <div className="services-layout">
+        {/* Sidebar with filters */}
+        <aside className="services-sidebar">
+          <div className="sidebar-section">
+            <h3>Categories</h3>
+            <div className="category-list">
+              {categories.map(category => (
+                <button
+                  key={category.id}
+                  className={`category-item ${selectedCategory === category.id ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(category.id)}
+                >
+                  <span>{category.name}</span>
+                  <span className="category-count">{category.count}</span>
+                </button>
+              ))}
             </div>
           </div>
-        </div>
 
-        <ServiceFilters
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          onSearch={setSearchTerm}
-        />
-
-        <div className="services-grid">
-          {filteredServices.map(service => (
-            <ServiceCard
-              key={service.id}
-              service={service}
-              onBook={handleBookService}
-            />
-          ))}
-        </div>
-
-        {filteredServices.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>
-            No services found matching your criteria.
+          <div className="sidebar-section">
+            <h3>Active Filter</h3>
+            <div className="active-filter">
+              {selectedCategory === 'all' ? 'All Categories' : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
+            </div>
           </div>
-        )}
-      </main>
+
+          <div className="sidebar-section">
+            <h3>Warranty Benefits</h3>
+            <div className="benefits-list">
+              <div className="benefit-item">✅ 30-day service warranty</div>
+              <div className="benefit-item">✅ Free re-service if unsatisfied</div>
+              <div className="benefit-item">✅ Certified technicians</div>
+              <div className="benefit-item">✅ Genuine spare parts</div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="services-main-content">
+          {/* Search and sort bar */}
+          <div className="services-toolbar">
+            <div className="results-count">
+              Found {filteredServices.length} {filteredServices.length === 1 ? 'service' : 'services'}
+            </div>
+            <div className="search-sort">
+              <div className="search-box">
+                <span>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search services..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <select className="sort-select" defaultValue="default">
+                <option value="default">Sort by: Default</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="popular">Most Popular</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Services Grid */}
+          <div className="services-grid">
+            {filteredServices.map(service => (
+              <div key={service.id} className={`service-card ${service.popular ? 'popular' : ''}`}>
+                {service.discount && (
+                  <div className="discount-badge">{service.discount}</div>
+                )}
+                <div className="service-card-image">
+                  <span className="service-icon">{service.icon}</span>
+                  {service.popular && <span className="service-badge">Popular</span>}
+                </div>
+                <div className="service-card-content">
+                  <h3 className="service-name">{service.name}</h3>
+                  <p className="service-description">{service.description}</p>
+                  <div className="service-details">
+                    <span className="service-detail">⏱️ {service.duration}</span>
+                    <span className="service-detail">👥 {service.technicians} {service.technicians === 1 ? 'technician' : 'technicians'}</span>
+                  </div>
+                  <div className="service-price">
+                    <div>
+                      {service.discount && (
+                        <span className="original-price">₱{(service.price * 1.2).toLocaleString()}</span>
+                      )}
+                      <span className="price-amount">₱{service.price.toLocaleString()}</span>
+                    </div>
+                    <span className="warranty-chip">🔒 {service.warranty} warranty</span>
+                  </div>
+                  <button className="book-btn" onClick={() => handleBookService(service)}>
+                    Book Now →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {filteredServices.length === 0 && (
+            <div className="no-services">
+              No services found matching your criteria.
+            </div>
+          )}
+        </main>
+      </div>
 
       {showBookingModal && selectedService && (
         <ServiceBookingModal

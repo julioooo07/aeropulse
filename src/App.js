@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { CartProvider } from './context/CartContext';
+import { UserProvider, useUser } from './context/UserContext';
 import Login from './components/login/Login';
 import Register from './components/register/Register';
 import Home from './components/home/Home';
@@ -13,36 +14,163 @@ import Checkout from './components/checkout/Checkout';
 import MyOrders from './components/orders/MyOrders';
 import './App.css';
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const currentUser = localStorage.getItem('currentUser');
-    return !!currentUser;
-  });
+// Protected Route wrapper component
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useUser();
+  
+  if (loading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+  
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+};
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
+// Public Route wrapper (redirects to home if already authenticated)
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useUser();
+  
+  if (loading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+  
+  return !isAuthenticated ? children : <Navigate to="/home" replace />;
+};
+
+// Main App content with routes
+function AppContent() {
+  const { isAuthenticated, loading } = useUser();
+
+  if (loading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
 
   return (
-    <CartProvider>
-      <Router>
-        <div className="App">
-          <Routes>
-            <Route path="/" element={isAuthenticated ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
-            <Route path="/login" element={isAuthenticated ? <Navigate to="/home" replace /> : <Login onLogin={handleLogin} />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/home" element={isAuthenticated ? <Home /> : <Navigate to="/login" replace />} />
-            <Route path="/settings" element={isAuthenticated ? <Settings /> : <Navigate to="/login" replace />} />
-            <Route path="/myunit" element={isAuthenticated ? <MyUnit /> : <Navigate to="/login" replace />} />
-            <Route path="/shop" element={isAuthenticated ? <Shop /> : <Navigate to="/login" replace />} />
-            <Route path="/contact" element={isAuthenticated ? <Contact /> : <Navigate to="/login" replace />} />
-            <Route path="/services" element={isAuthenticated ? <Services /> : <Navigate to="/login" replace />} />
-            <Route path="/checkout" element={isAuthenticated ? <Checkout /> : <Navigate to="/login" replace />} />
-            <Route path="/my-orders" element={isAuthenticated ? <MyOrders /> : <Navigate to="/login" replace />} />
-          </Routes>
-        </div>
-      </Router>
-    </CartProvider>
+    <Routes>
+      {/* Root path redirects based on auth status */}
+      <Route 
+        path="/" 
+        element={
+          isAuthenticated ? 
+            <Navigate to="/home" replace /> : 
+            <Navigate to="/login" replace />
+        } 
+      />
+      
+      {/* Public routes */}
+      <Route 
+        path="/login" 
+        element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } 
+      />
+      
+      <Route 
+        path="/register" 
+        element={
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        } 
+      />
+      
+      {/* Protected routes */}
+      <Route 
+        path="/home" 
+        element={
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/settings" 
+        element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/myunit" 
+        element={
+          <ProtectedRoute>
+            <MyUnit />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/shop" 
+        element={
+          <ProtectedRoute>
+            <Shop />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/contact" 
+        element={
+          <ProtectedRoute>
+            <Contact />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/services" 
+        element={
+          <ProtectedRoute>
+            <Services />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/checkout" 
+        element={
+          <ProtectedRoute>
+            <Checkout />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/my-orders" 
+        element={
+          <ProtectedRoute>
+            <MyOrders />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Catch all - redirect to home or login based on auth */}
+      <Route 
+        path="*" 
+        element={
+          <Navigate to={isAuthenticated ? "/home" : "/login"} replace />
+        } 
+      />
+    </Routes>
+  );
+}
+
+// Main App component with providers
+function App() {
+  return (
+    <UserProvider>
+      <CartProvider>
+        <Router>
+          <div className="App">
+            <AppContent />
+          </div>
+        </Router>
+      </CartProvider>
+    </UserProvider>
   );
 }
 

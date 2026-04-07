@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import './Home.css';
@@ -15,60 +15,134 @@ import Footer from './Footer';
 function Home() {
   const navigate = useNavigate();
   const { cart, addToCart, updateQuantity, removeFromCart, getCartTotal, getCartCount, clearCart } = useCart();
+  
+  // State Management
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState('home');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   
+  // Track scroll for header effects
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  
+  // Notifications Data
   const [notifications] = useState([
-    { id: 1, title: 'Welcome!', message: 'Thank you for joining Cold Air', time: 'Just now', unread: true },
-    { id: 2, title: 'Special Offer', message: '20% off on all AC services this week!', time: '2 hours ago', unread: true },
-    { id: 3, title: 'Booking Confirmed', message: 'Your service appointment is confirmed', time: 'Yesterday', unread: false },
+    { 
+      id: 1, 
+      title: 'Welcome!', 
+      message: 'Thank you for joining Cold Air', 
+      time: 'Just now', 
+      unread: true 
+    },
+    { 
+      id: 2, 
+      title: 'Special Offer', 
+      message: '20% off on all AC services this week!', 
+      time: '2 hours ago', 
+      unread: true 
+    },
+    { 
+      id: 3, 
+      title: 'Booking Confirmed', 
+      message: 'Your service appointment is confirmed', 
+      time: 'Yesterday', 
+      unread: false 
+    },
   ]);
 
-  const services = [
-    { id: 'service_1', name: 'General Cleaning', icon: '🧹', price: 80, description: 'Basic AC cleaning service', category: 'service' },
-    { id: 'service_2', name: 'Chemical Cleaning', icon: '🧪', price: 120, description: 'Deep chemical cleaning', category: 'service' },
-    { id: 'service_3', name: 'AC Overhaul', icon: '🔧', price: 250, description: 'Complete AC overhaul', category: 'service' },
-  ];
-
+  // Brand Data - Matches the structure in BrandsSection.js
   const brands = [
-    'DAIKIN', 'Carrier', 'McQuay', 'TOSHIBA', 'FUJITSU', 
-    'MITSUBISHI', 'LENNOX', 'LG', 'Panasonic', 'SAMSUNG', 'SHARP'
+    { 
+      id: 1, 
+      name: 'Midea', 
+      emoji: '❄️',
+      logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQvl2GSFigO4nNXMWW1qO_VZ1GZwjVl5alpsw&s',
+      description: 'Premium AC Solutions'
+    },
+    { 
+      id: 2, 
+      name: 'TCL', 
+      emoji: '🌬️',
+      logoUrl: 'https://cdn.manilastandard.net/wp-content/uploads/2023/02/TCL.png',
+      description: 'Smart Air Conditioning'
+    },
+    { 
+      id: 3, 
+      name: 'Aux', 
+      emoji: '🔧',
+      logoUrl: 'https://auxaircon.com.ph/images/aux_logo.png',
+      description: 'Energy Efficient'
+    },
+    { 
+      id: 4, 
+      name: 'Samsung', 
+      emoji: '📱',
+      logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRXFVQh2BQhYtWf9APXNliSnNTi7MBwV6yPFA&s',
+      description: 'Innovation Technology'
+    },
+    { 
+      id: 5, 
+      name: 'Daikin', 
+      emoji: '✨',
+      logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSwu8SCQH4joBnn0HXF5F_HQKBRb85KZ8ZkuA&s',
+      description: 'World Leader in AC'
+    },
+    { 
+      id: 6, 
+      name: 'Carrier', 
+      emoji: '💨',
+      logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/8f/Logo_of_the_Carrier_Corporation.svg',
+      description: 'Inventor of AC'
+    },
+    { 
+      id: 7, 
+      name: 'LG', 
+      emoji: '⚡',
+      logoUrl: 'https://www.lg.com/content/dam/lge/common/logo/logo-lg-100-44.jpg',
+      description: 'Life\'s Good'
+    },
+    { 
+      id: 8, 
+      name: 'American Home', 
+      emoji: '🏠',
+      logoUrl: 'https://ansons.ph/wp-content/uploads/2024/05/aham.jpg',
+      description: 'Home Comfort Solutions'
+    },
+    { 
+      id: 9, 
+      name: 'Gree', 
+      emoji: '🌿',
+      logoUrl: 'https://1000logos.net/wp-content/uploads/2018/08/Gree-Logo.png',
+      description: 'Eco-Friendly Cooling'
+    },
   ];
 
+  // Handlers
   const handleLogout = () => {
-    // Clear all user data
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('cart');
-    localStorage.removeItem('addresses');
-    localStorage.removeItem('orders');
-    localStorage.removeItem('ac_units');
-    localStorage.removeItem('failed_attempts_');
-    localStorage.removeItem('aeropulse_users');
+    const keysToRemove = [
+      'currentUser',
+      'cart',
+      'addresses',
+      'orders',
+      'ac_units',
+      'failed_attempts_',
+      'aeropulse_users'
+    ];
     
-    // Clear cart from context
+    keysToRemove.forEach(key => localStorage.removeItem(key));
     clearCart();
-    
-    // Navigate to login page
     navigate('/login');
   };
 
-  const handleAddToCart = (service) => {
-    const product = {
-      id: service.id,
-      name: service.name,
-      icon: service.icon,
-      price: service.price,
-      category: service.category,
-      description: service.description
-    };
-    addToCart(product);
-    alert(`${service.name} added to cart!`);
-  };
-
   const handleBookNow = () => {
-    alert('Booking service!');
+    navigate('/services');
   };
 
   const handleCheckout = () => {
@@ -76,36 +150,63 @@ function Home() {
     setShowCart(false);
   };
 
+  const handleMenuToggle = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
+  const handleNotificationClick = () => {
+    setShowNotifications(!showNotifications);
+    setShowCart(false);
+  };
+
+  const handleCartClick = () => {
+    setShowCart(!showCart);
+    setShowNotifications(false);
+  };
+
+  const handleMenuClose = () => {
+    setIsMenuOpen(false);
+  };
+
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
     <div className="home-container">
+      {/* Header with scroll effect */}
       <Header
-        onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
-        onNotificationClick={() => {
-          setShowNotifications(!showNotifications);
-          setShowCart(false);
-        }}
-        onCartClick={() => {
-          setShowCart(!showCart);
-          setShowNotifications(false);
-        }}
+        onMenuToggle={handleMenuToggle}
+        onNotificationClick={handleNotificationClick}
+        onCartClick={handleCartClick}
         notificationCount={unreadCount}
+        scrolled={scrolled}
       />
 
+      {/* Side Menu */}
       <SideMenu
         isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
+        onClose={handleMenuClose}
         activePage={activePage}
         onLogout={handleLogout}
       />
 
+      {/* Menu Overlay */}
+      {isMenuOpen && (
+        <div 
+          className="menu-overlay" 
+          onClick={handleMenuClose}
+          role="presentation"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Notifications Modal */}
       <NotificationsModal
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
         notifications={notifications}
       />
 
+      {/* Cart Modal */}
       <CartModal
         isOpen={showCart}
         onClose={() => setShowCart(false)}
@@ -116,15 +217,19 @@ function Home() {
         getCartTotal={getCartTotal}
       />
 
+      {/* Main Content */}
       <main className="main-content">
-        <div className="content-wrapper">
-          <HeroSection onBookNow={handleBookNow} />
-          <ServicesSection services={services} onAddToCart={handleAddToCart} />
-          <BrandsSection brands={brands} />
-          <InfoSection />
-        </div>
+        {/* Hero Section */}
+        <HeroSection onBookNow={handleBookNow} />
+        
+        {/* Brands Section - Pass the brands data */}
+        <BrandsSection brands={brands} />
+        
+        {/* Info Section */}
+        <InfoSection />
       </main>
 
+      {/* Footer */}
       <Footer />
     </div>
   );

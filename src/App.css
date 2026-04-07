@@ -11,3 +11,45 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Global Dark Mode Styles */
+.dark-mode {
+  background-color: #1a1a2e;
+  color: #eee;
+}
+
+.dark-mode body {
+  background-color: #1a1a2e;
+}
+
+.dark-mode input,
+.dark-mode select,
+.dark-mode textarea {
+  background-color: #0f3460;
+  border-color: #1a1a2e;
+  color: #eee;
+}
+
+.dark-mode input::placeholder {
+  color: #aaa;
+}
+
+/* Toast animation */
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+}
