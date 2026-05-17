@@ -11,10 +11,10 @@ const links = [
   { to: '/superadmin/inventory', label: 'Inventory Checker', icon: icons.boxOpen },
   { to: '/superadmin/inventory-logs', label: 'Inventory Logs', icon: icons.clipboardList },
   { to: '/superadmin/tasks', label: 'Processing Tech Tasks', icon: icons.tools },
-  { to: '/superadmin/alerts', label: 'Customer Alerts', icon: icons.diamondExclamation }
+  { to: '/superadmin/alerts', label: 'Customer Alerts', icon: icons.diamondExclamation },
 ];
 
-const SuperAdminSidebar = ({ isOpen, onClose }) => {
+const SuperAdminSidebar = () => {
   const navigate = useNavigate();
   const { logout } = useUser();
 
@@ -26,18 +26,17 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
   };
 
   return (
-    <aside className={`super-sidebar ${isOpen ? 'open' : ''}`}>
+    <aside className="super-sidebar">
       <div className="super-sidebar-top">
         <div className="super-sidebar-brand">AeroPulse HQ</div>
-        <button type="button" className="super-close" onClick={onClose}>{'\u2715'}</button>
       </div>
+
       <nav className="super-nav">
         {links.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
-            className={({ isActive }) => `super-nav-link ${isActive ? 'active' : ''}`}
-            onClick={onClose}
+            className={({ isActive }) => `super-nav-link${isActive ? ' active' : ''}`}
           >
             <span className="super-nav-icon-wrap">
               <img src={link.icon} alt="" className="inline-icon inline-icon--md" />
@@ -46,12 +45,10 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
           </NavLink>
         ))}
       </nav>
-      <button
-        type="button"
-        className="super-logout"
-        onClick={handleLogout}
-      >
-        <img src={icons.signOutAlt} alt="" className="inline-icon inline-icon--md" /> Logout
+
+      <button type="button" className="super-logout" onClick={handleLogout}>
+        <img src={icons.signOutAlt} alt="" className="inline-icon inline-icon--md" />
+        Logout
       </button>
     </aside>
   );

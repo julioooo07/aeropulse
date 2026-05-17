@@ -10,6 +10,11 @@ const buildSeverity = (notification) => {
   return 'Medium';
 };
 
+const severityBadgeClass = (severity) => {
+  if (severity === 'High') return 'super-badge super-badge--high';
+  return 'super-badge super-badge--medium';
+};
+
 const SuperAdminAlerts = () => {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,9 +39,7 @@ const SuperAdminAlerts = () => {
     };
 
     load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const complaintAlerts = useMemo(() => {
@@ -54,18 +57,41 @@ const SuperAdminAlerts = () => {
   return (
     <SuperAdminLayout title="Customer Complaint Alerts" subtitle="Critical customer concerns requiring executive review">
       <div className="super-card">
-        <h3>Complaint Alert Feed</h3>
+        <div className="super-section-header">
+          <h3>Complaint Alert Feed</h3>
+          {!loading && complaintAlerts.length > 0 && (
+            <span className="super-badge super-badge--high">{complaintAlerts.length} Active</span>
+          )}
+        </div>
+
         <div className="super-list">
-          {loading ? <p>Loading…</p> : null}
-          {error ? <p className="super-muted">{error}</p> : null}
-          {!loading && !complaintAlerts.length ? <p>No complaint alerts right now.</p> : null}
+          {loading && (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="super-shimmer" style={{ height: 80 }} />
+              ))}
+            </div>
+          )}
+
+          {!loading && error && (
+            <p className="super-muted" style={{ color: 'var(--status-cancel-text)' }}>{error}</p>
+          )}
+
+          {!loading && !error && complaintAlerts.length === 0 && (
+            <div className="super-empty">
+              <p>No complaint alerts right now. All clear.</p>
+            </div>
+          )}
+
           {!loading && complaintAlerts.map((alert) => (
             <div key={alert.id} className="super-list-item">
-              <strong>{alert.id}</strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                <strong>#{alert.id}</strong>
+                <span className={severityBadgeClass(alert.severity)}>{alert.severity} Severity</span>
+              </div>
               <p>Customer: {alert.customer}</p>
               <p>Branch: {alert.branch}</p>
-              <p>Concern: {alert.concern}</p>
-              <p>Severity: {alert.severity}</p>
+              <p style={{ color: 'var(--super-text-secondary)' }}>{alert.concern}</p>
             </div>
           ))}
         </div>

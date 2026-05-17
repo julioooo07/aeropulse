@@ -4,7 +4,6 @@ import { apiRequest } from '../../../config/api';
 import '../superAdminShared.css';
 
 const SuperAdminBranches = () => {
-  // Removed unused: branches, setBranches
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,7 +15,6 @@ const SuperAdminBranches = () => {
       setLoading(true);
       setError('');
       try {
-        // Fetch admins for the dropdown
         const adminData = await apiRequest('/users?role=admin');
         const adminsList = Array.isArray(adminData?.users) ? adminData.users : [];
         if (active) setAdmins(adminsList);
@@ -33,8 +31,6 @@ const SuperAdminBranches = () => {
     return () => { active = false; };
   }, []);
 
-  // Removed unused: getAdminForBranch
-
   const formatLastLogin = (date) => {
     if (!date) return 'Never';
     const d = new Date(date);
@@ -47,32 +43,58 @@ const SuperAdminBranches = () => {
     return d.toLocaleDateString();
   };
 
+  const assignedAdmins = admins.filter(a => a.assignedBranch);
+
   return (
     <SuperAdminLayout title="Branch Location Handling" subtitle="Monitor branch allocation, network status, needs, and requests">
       <div className="super-grid-2">
+
+        {/* Branch Allocation panel */}
         <div className="super-card">
-          <h3>Branch Allocation and Admin Assignment</h3>
-          <div className="super-list">
-            {loading && <p>Loading branches and admins...</p>}
-            {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-            {!loading && admins.length > 0 && admins
-              .filter(admin => admin.assignedBranch)
-              .map((admin) => (
-                <div key={admin.id} className="super-list-item">
-                  <strong>{admin.assignedBranch}</strong>
-                  <p>Admin: {admin.name}</p>
-                  <p>Email: {admin.email}</p>
-                  <p>Last Login: {formatLastLogin(admin.lastLogin)}</p>
-                  <p>Phone: {admin.phone || '-'}</p>
-                  <p>Address: {admin.address || '-'}</p>
-                </div>
-              ))}
-            {!loading && admins.filter(a => a.assignedBranch).length === 0 && (
-              <p>No admins assigned to branches yet.</p>
+          <div className="super-section-header">
+            <h3>Branch Allocation & Admin Assignment</h3>
+            {!loading && (
+              <span className="super-badge super-badge--complete">{assignedAdmins.length} Assigned</span>
             )}
           </div>
+
+          <div className="super-list">
+            {loading && (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="super-shimmer" style={{ height: 90 }} />
+                ))}
+              </div>
+            )}
+
+            {!loading && error && (
+              <p style={{ color: 'var(--status-cancel-text)', fontSize: 13 }}>{error}</p>
+            )}
+
+            {!loading && assignedAdmins.length === 0 && !error && (
+              <div className="super-empty">
+                <p>No admins assigned to branches yet.</p>
+              </div>
+            )}
+
+            {!loading && assignedAdmins.map((admin) => (
+              <div key={admin.id} className="super-list-item">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
+                  <strong>{admin.assignedBranch}</strong>
+                  <span className="super-badge super-badge--progress">
+                    {formatLastLogin(admin.lastLogin)}
+                  </span>
+                </div>
+                <p>Admin: {admin.name}</p>
+                <p>Email: {admin.email}</p>
+                {admin.phone && <p>Phone: {admin.phone}</p>}
+                {admin.address && <p>Address: {admin.address}</p>}
+              </div>
+            ))}
+          </div>
         </div>
-        
+
+        {/* Manage Branch form */}
         <form
           className="super-card"
           onSubmit={(e) => {
@@ -81,46 +103,62 @@ const SuperAdminBranches = () => {
             setDraft({ name: '', location: '', manager: '', adminId: '', needs: '', requests: '' });
           }}
         >
-          <h3>Manage Branch</h3>
-          <select 
-            value={draft.adminId} 
-            onChange={(e) => setDraft((p) => ({ ...p, adminId: e.target.value }))}
-            placeholder="Select admin"
-            style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          >
-            <option value="">Select Admin...</option>
-            {admins.filter(a => !a.assignedBranch).map(admin => (
-              <option key={admin.id} value={admin.id}>{admin.name} ({admin.email})</option>
-            ))}
-          </select>
-          <input 
-            placeholder="Branch name" 
-            value={draft.name} 
-            onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} 
-            style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <input 
-            placeholder="Location" 
-            value={draft.location} 
-            onChange={(e) => setDraft((p) => ({ ...p, location: e.target.value }))} 
-            style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <input 
-            placeholder="Current need" 
-            value={draft.needs} 
-            onChange={(e) => setDraft((p) => ({ ...p, needs: e.target.value }))} 
-            style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <input 
-            placeholder="Request for HQ" 
-            value={draft.requests} 
-            onChange={(e) => setDraft((p) => ({ ...p, requests: e.target.value }))} 
-            style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <button type="submit" style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#2563eb', color: 'white', cursor: 'pointer' }}>
-            Assign Branch to Admin
-          </button>
+          <div className="super-section-header">
+            <h3>Manage Branch</h3>
+          </div>
+
+          <label>
+            Select Admin
+            <select
+              value={draft.adminId}
+              onChange={(e) => setDraft((p) => ({ ...p, adminId: e.target.value }))}
+            >
+              <option value="">Select Admin…</option>
+              {admins.filter(a => !a.assignedBranch).map(admin => (
+                <option key={admin.id} value={admin.id}>{admin.name} ({admin.email})</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Branch Name
+            <input
+              placeholder="e.g. Makati Main"
+              value={draft.name}
+              onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
+            />
+          </label>
+
+          <label>
+            Location
+            <input
+              placeholder="e.g. 123 Ayala Ave, Makati"
+              value={draft.location}
+              onChange={(e) => setDraft((p) => ({ ...p, location: e.target.value }))}
+            />
+          </label>
+
+          <label>
+            Current Need
+            <input
+              placeholder="e.g. Additional technician"
+              value={draft.needs}
+              onChange={(e) => setDraft((p) => ({ ...p, needs: e.target.value }))}
+            />
+          </label>
+
+          <label>
+            Request for HQ
+            <input
+              placeholder="e.g. Inventory restock"
+              value={draft.requests}
+              onChange={(e) => setDraft((p) => ({ ...p, requests: e.target.value }))}
+            />
+          </label>
+
+          <button type="submit">Assign Branch to Admin</button>
         </form>
+
       </div>
     </SuperAdminLayout>
   );
