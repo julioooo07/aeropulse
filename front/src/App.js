@@ -28,6 +28,7 @@ import AdminOrders from './components/ADMIN/Orders/AdminOrders';
 import AdminReports from './components/ADMIN/Reports/AdminReports';
 import AdminSettings from './components/ADMIN/Settings/AdminSettings';
 import AdminAuditLogs from './components/ADMIN/AuditLogs/AdminAuditLogs';
+import AdminInventoryLogs from './components/ADMIN/InventoryLogs/AdminInventoryLogs';
 import SuperAdminDashboard from './components/SUPERADMIN/Dashboard/SuperAdminDashboard';
 import SuperAdminBranches from './components/SUPERADMIN/Dashboard/SuperAdminBranches';
 import SuperAdminSales from './components/SUPERADMIN/Dashboard/SuperAdminSales';
@@ -305,6 +306,14 @@ function AppContent() {
         }
       />
       <Route
+        path="/admin/inventory-logs"
+        element={
+          <RoleRoute allowedRoles={['admin']}>
+            <AdminInventoryLogs />
+          </RoleRoute>
+        }
+      />
+      <Route
         path="/admin/profile"
         element={
           <RoleRoute allowedRoles={['admin']}>
@@ -375,6 +384,14 @@ function AppContent() {
         element={
           <RoleRoute allowedRoles={['superadmin']}>
             <SuperAdminTasks />
+          </RoleRoute>
+        }
+      />
+      <Route
+        path="/superadmin/inventory-logs"
+        element={
+          <RoleRoute allowedRoles={['superadmin']}>
+            <AdminInventoryLogs />
           </RoleRoute>
         }
       />

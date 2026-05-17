@@ -32,7 +32,7 @@ export const CartProvider = ({ children }) => {
     const stock = typeof item?.stock === 'number' && Number.isFinite(item.stock)
       ? Math.max(0, Math.floor(item.stock))
       : null;
-    if (stock === null) return Math.max(1, desiredQuantity);
+    if (stock === null) return 0;
     if (stock === 0) return 0;
     return Math.min(stock, Math.max(1, desiredQuantity));
   };
@@ -77,6 +77,42 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const syncCartStock = (products = []) => {
+    const stockLookup = new Map();
+    products.forEach((product) => {
+      const stock = typeof product?.stock === 'number' && Number.isFinite(product.stock)
+        ? Math.max(0, Math.floor(product.stock))
+        : null;
+      if (stock === null) return;
+      if (product.id !== undefined && product.id !== null) {
+        stockLookup.set(String(product.id), stock);
+      }
+      const sku = String(product.sku || product.model || '').trim();
+      if (sku) {
+        stockLookup.set(sku, stock);
+      }
+    });
+
+    setCart((prevCart) => prevCart.map((item) => {
+      const lookupKey = String(item.id || item.model || item.sku || '').trim();
+      if (!lookupKey || !stockLookup.has(lookupKey)) return item;
+
+      const stock = stockLookup.get(lookupKey);
+      if (stock > 0) {
+        return {
+          ...item,
+          stock,
+          quantity: Math.min(Math.max(1, item.quantity || 1), stock),
+        };
+      }
+
+      return {
+        ...item,
+        stock: 0,
+      };
+    }));
+  };
+
   const clearCart = () => {
     setCart([]);
     localStorage.removeItem('cart');
@@ -96,6 +132,7 @@ export const CartProvider = ({ children }) => {
       addToCart,
       removeFromCart,
       updateQuantity,
+      syncCartStock,
       clearCart,
       getCartTotal,
       getCartCount

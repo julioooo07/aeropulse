@@ -10,6 +10,13 @@ const auditLogSchema = new mongoose.Schema(
         "inventory_change_approved",
         "inventory_change_rejected",
         "inventory_direct_update",
+        "inventory_transaction_created",
+        "stock_addition",
+        "stock_adjustment",
+        "order_deduction",
+        "restock_receipt",
+        "order_created",
+        "order_processed",
         "restock_order_created",
         "restock_order_signalled",
         "restock_order_received",
@@ -36,7 +43,7 @@ const auditLogSchema = new mongoose.Schema(
     },
     entityType: {
       type: String,
-      enum: ["product", "inventory_change_request", "restock_order", "user"],
+      enum: ["product", "inventory_change_request", "restock_order", "inventory_transaction", "order", "user"],
       required: true,
     },
     entityId: {

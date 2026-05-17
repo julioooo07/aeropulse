@@ -135,6 +135,14 @@ function CartSidebar({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, on
                   <div style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {item.name}
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '999px', background: typeof item.stock === 'number' && item.stock <= 0 ? '#fef2f2' : typeof item.stock === 'number' && item.stock <= 5 ? '#fff7ed' : '#ecfdf5', color: typeof item.stock === 'number' && item.stock <= 0 ? '#b91c1c' : typeof item.stock === 'number' && item.stock <= 5 ? '#b45309' : '#166534' }}>
+                      {typeof item.stock === 'number' && item.stock <= 0 ? 'Out of Stock' : typeof item.stock === 'number' && item.stock <= 5 ? 'Low Stock' : 'Normal'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>
+                      Available Stocks: {typeof item.stock === 'number' ? item.stock : 'N/A'}
+                    </span>
+                  </div>
                   <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '6px' }}>
                     ₱{item.price.toLocaleString()} each
                   </div>

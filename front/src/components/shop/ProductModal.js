@@ -34,12 +34,14 @@ function ProductModal({ product, onClose, onAddToCart }) {
 
   const stockValue = product?.stock;
   const availableStock = useMemo(() => {
-    if (typeof stockValue !== 'number') return null;
-    return Number.isFinite(stockValue) ? Math.max(0, Math.floor(stockValue)) : null;
+    if (typeof stockValue !== 'number' || !Number.isFinite(stockValue)) return 0;
+    return Math.max(0, Math.floor(stockValue));
   }, [stockValue]);
 
-  const isOutOfStock = availableStock === 0;
-  const maxQuantity = availableStock && availableStock > 0 ? availableStock : null;
+  const isOutOfStock = availableStock <= 0;
+  const maxQuantity = availableStock > 0 ? availableStock : null;
+  const stockState = product?.stockState || (isOutOfStock ? 'out' : availableStock <= 5 ? 'low' : 'normal');
+  const stockLabel = product?.stockLabel || (stockState === 'out' ? 'Out of Stock' : stockState === 'low' ? 'Low Stock' : 'Normal');
 
   useEffect(() => {
     setQuantity(1);
@@ -82,11 +84,26 @@ function ProductModal({ product, onClose, onAddToCart }) {
               <li><span className="spec-label">Energy Rating:</span><span>{product.energyRating}</span></li>
               <li><span className="spec-label">Warranty:</span><span>{product.warranty}</span></li>
             </ul>
-            {typeof availableStock === 'number' ? (
-              <div className="product-warranty" style={{ marginBottom: '10px' }}>
-                {availableStock > 0 ? `${availableStock} units available` : 'Out of Stock'}
-              </div>
-            ) : null}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  letterSpacing: '0.02em',
+                  background: stockState === 'out' ? '#fef2f2' : stockState === 'low' ? '#fff7ed' : '#ecfdf5',
+                  color: stockState === 'out' ? '#b91c1c' : stockState === 'low' ? '#b45309' : '#166534',
+                }}
+              >
+                {stockLabel}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: stockState === 'low' ? '#b45309' : '#374151' }}>
+                Available Stocks: {availableStock}
+              </span>
+            </div>
             <div className="quantity-selector">
               <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
               <span>{quantity}</span>

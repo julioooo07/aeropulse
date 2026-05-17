@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useUser } from '../../context/UserContext';
 import { apiRequest } from '../../config/api';
 import icons from '../common/icons';
-import { deduplicateProducts, mergeProductLists } from '../../utils/productDeduplication';
 import './Shop.css';
 import CategoryFilter from './CategoryFilter';
 import ProductGrid from './ProductGrid';
@@ -357,7 +356,7 @@ const fallbackProducts = [
 function Shop() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { cart, addToCart, updateQuantity, removeFromCart, getCartCount, getCartTotal } = useCart();
+  const { cart, addToCart, updateQuantity, removeFromCart, syncCartStock, getCartCount, getCartTotal } = useCart();
   const { isAuthenticated, showAuthRequiredPrompt } = useUser();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedBrand, setSelectedBrand] = useState('all');
@@ -368,10 +367,13 @@ function Shop() {
   const [searchTerm, setSearchTerm] = useState('');
   const [backendProducts, setBackendProducts] = useState([]);
 
-  useEffect(() => {
-    apiRequest('/products/public')
-      .then((response) => {
-        const mapped = (response.products || []).map((product) => ({
+  const loadProducts = useCallback(async () => {
+    try {
+      const response = await apiRequest('/products/public');
+      const mapped = (response.products || []).map((product) => {
+        const stock = Math.max(0, Number(product.stock) || 0);
+        const stockState = stock <= 0 ? 'out' : stock <= 5 ? 'low' : 'normal';
+        return {
           id: product.id,
           name: product.name,
           brand: product.brand || 'Generic',
@@ -381,34 +383,61 @@ function Shop() {
           description: Array.isArray(product.features) && product.features.length > 0
             ? product.features.join(', ')
             : 'Energy efficient AC unit ready for installation.',
-          inStock: Number(product.stock) > 0,
-          stock: Number(product.stock) || 0,
+          stock,
+          stockState,
+          stockLabel: stockState === 'out' ? 'Out of Stock' : stockState === 'low' ? 'Low Stock' : 'Normal',
           model: product.sku || '',
+          sku: product.sku || '',
           energyRating: '5 Stars',
           warranty: '1 year parts & labor, 5 years compressor',
-          imageUrl: '',
-        }));
-        setBackendProducts(mapped);
-      })
-      .catch(() => setBackendProducts([]));
-  }, []);
+          imageUrl: product.image || product.imageUrl || '',
+        };
+      });
+      setBackendProducts(mapped);
+      syncCartStock(mapped);
+    } catch (_error) {
+      setBackendProducts([]);
+      syncCartStock([]);
+    }
+  }, [syncCartStock]);
 
-  const products = useMemo(() => {
-    // Merge backend and fallback products using dedicated utility
-    // This ensures consistent deduplication logic across the app
-    const merged = mergeProductLists(fallbackProducts, backendProducts, {
-      preferBackend: true,
-      verbose: false
-    });
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
-    // Apply comprehensive deduplication
-    // Removes duplicates based on SKU/model and name+specs combination
-    const deduplicated = deduplicateProducts(merged, {
-      verbose: process.env.NODE_ENV !== 'production'
-    });
+  useEffect(() => {
+    if (backendProducts.length > 0) {
+      syncCartStock(backendProducts);
+    }
+  }, [backendProducts, syncCartStock]);
 
-    return deduplicated;
-  }, [backendProducts]);
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      if (!active) return;
+      await loadProducts();
+    };
+
+    const pollId = window.setInterval(refresh, 20000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      active = false;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadProducts]);
+
+  const products = useMemo(
+    () => (backendProducts.length > 0 ? backendProducts : fallbackProducts.slice(0, 0)),
+    [backendProducts]
+  );
 
   const categories = useMemo(() => {
     const counts = products.reduce((acc, product) => {

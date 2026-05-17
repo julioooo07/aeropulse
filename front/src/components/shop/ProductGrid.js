@@ -42,6 +42,15 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
   return (
     <div className="products-grid">
       {products.map(product => (
+        (() => {
+          const stock = typeof product.stock === 'number' && Number.isFinite(product.stock)
+            ? Math.max(0, Math.floor(product.stock))
+            : 0;
+          const stockState = product.stockState || (stock <= 0 ? 'out' : stock <= 5 ? 'low' : 'normal');
+          const stockLabel = product.stockLabel || (stockState === 'out' ? 'Out of Stock' : stockState === 'low' ? 'Low Stock' : 'Normal');
+          const isInStock = stock > 0;
+
+          return (
         <div
           key={product.id}
           className={`product-card ${product.featured ? 'featured' : ''}`}
@@ -63,15 +72,32 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
             <div className="product-brand">{product.brand}</div>
             <div className="product-name">{product.name}</div>
             <div className="product-specs">{product.specs}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  letterSpacing: '0.02em',
+                  background: stockState === 'out' ? '#fef2f2' : stockState === 'low' ? '#fff7ed' : '#ecfdf5',
+                  color: stockState === 'out' ? '#b91c1c' : stockState === 'low' ? '#b45309' : '#166534',
+                }}
+              >
+                {stockLabel}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: stockState === 'low' ? '#b45309' : '#374151' }}>
+                Available Stocks: {stock}
+              </span>
+            </div>
             <div className="product-price">
               {'\u20b1'}{product.price.toLocaleString()}
               {product.oldPrice && (
                 <span className="product-old-price"> {'\u20b1'}{product.oldPrice.toLocaleString()}</span>
               )}
             </div>
-            {typeof product.stock === 'number' && product.stock > 0 && (
-              <div className="product-warranty">{product.stock} units available</div>
-            )}
             <div className="product-warranty">
               <img src={icons.lock} alt="" className="inline-icon" /> {product.warranty}
             </div>
@@ -82,9 +108,9 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
                 e.stopPropagation();
                 onAddToCart(product);
               }}
-              disabled={!product.inStock}
+              disabled={!isInStock}
             >
-              {product.inStock ? (
+              {isInStock ? (
                 <>
                   Add to Cart <img src={icons.cartShoppingFast} alt="" className="inline-icon" />
                 </>
@@ -92,7 +118,7 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
                 'Out of Stock'
               )}
             </button>
-            {product.inStock && (
+            {isInStock && (
               <button
                 type="button"
                 className="add-to-cart-btn buy-now-btn"
@@ -106,6 +132,8 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
             )}
           </div>
         </div>
+          );
+        })()
       ))}
     </div>
   );

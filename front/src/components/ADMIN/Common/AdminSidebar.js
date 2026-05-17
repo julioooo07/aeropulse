@@ -9,6 +9,7 @@ import './styles.css';
 const navItems = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: icons.clipboardList },
   { to: '/admin/inventory', label: 'Inventory', icon: icons.boxOpen },
+  { to: '/admin/inventory-logs', label: 'Inventory Logs', icon: icons.clipboardList },
   { to: '/admin/maintenance', label: 'Maintenance', icon: icons.tools },
   { to: '/admin/technicians', label: 'Technicians', icon: icons.memberList },
   { to: '/admin/orders', label: 'Orders', icon: icons.clipboardList },

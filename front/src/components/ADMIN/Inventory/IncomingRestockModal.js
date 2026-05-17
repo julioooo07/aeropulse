@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../config/api';
+import { useUser } from '../../../context/UserContext';
 import './IncomingRestockModal.css';
 
 const IncomingRestockModal = ({ isOpen, onClose, onRefresh }) => {
@@ -8,7 +9,11 @@ const IncomingRestockModal = ({ isOpen, onClose, onRefresh }) => {
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [receivedQtys, setReceivedQtys] = useState({});
+  const [deliveryDetails, setDeliveryDetails] = useState({});
   const [actionInProgress, setActionInProgress] = useState('');
+  const { profile } = useUser() || {};
+
+  const currentUserName = profile?.name || '';
 
   useEffect(() => {
     if (isOpen) {
@@ -36,29 +41,58 @@ const IncomingRestockModal = ({ isOpen, onClose, onRefresh }) => {
   };
 
   const handleMarkReceived = async (restockId) => {
-    if (!window.confirm('Mark this restock as received?')) return;
+    const restock = restocks.find((r) => r.id === restockId);
+    if (!restock) return;
 
-    const receivedProducts = restocks
-      .find((r) => r.id === restockId)
-      ?.products.map((p) => ({
+    const details = deliveryDetails[restockId] || {};
+    const missingFields = [];
+    if (!details.trackingNumber?.trim()) missingFields.push('Tracking order number');
+    if (!details.deliveryCompany?.trim()) missingFields.push('Delivery company');
+    if (!details.deliveredBy?.trim()) missingFields.push('Delivered by');
+    if (!details.deliveryDate) missingFields.push('Delivery date');
+
+    if (missingFields.length > 0) {
+      setError(`Please complete: ${missingFields.join(', ')}`);
+      return;
+    }
+
+    const receivedProducts = restock.products.map((p) => {
+      const rawValue = receivedQtys[`${restockId}-${p.product?.id || p.product}`];
+      const quantity = rawValue !== undefined && rawValue !== '' ? Number(rawValue) : p.quantity;
+      return {
         productId: p.product?.id || p.product,
-        quantity: Number(receivedQtys[`${restockId}-${p.product?.id || p.product}`]) || p.quantity,
-      })) || [];
+        quantity,
+      };
+    });
 
+    if (receivedProducts.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+      setError('All received quantities must be positive numbers');
+      return;
+    }
+
+    setError('');
     setActionInProgress(restockId);
     try {
       await apiRequest(`/restock-orders/${restockId}/receive`, {
         method: 'PATCH',
-        body: JSON.stringify({ receivedProducts }),
+        body: JSON.stringify({
+          receivedProducts,
+          trackingNumber: details.trackingNumber,
+          deliveryCompany: details.deliveryCompany,
+          deliveredBy: details.deliveredBy,
+          deliveryDate: details.deliveryDate,
+          notes: details.notes || '',
+        }),
       });
 
       alert('Restock marked as received successfully');
       loadRestocks();
       setExpandedId(null);
       setReceivedQtys({});
+      setDeliveryDetails((prev) => ({ ...prev, [restockId]: {} }));
       onRefresh?.();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setError(err.message || 'Unable to mark as received');
     } finally {
       setActionInProgress('');
     }
@@ -158,17 +192,121 @@ const IncomingRestockModal = ({ isOpen, onClose, onRefresh }) => {
                       </div>
 
                       {restock.status === 'incoming' && (
-                        <div className="restock-actions">
-                          <button
-                            className="btn-receive"
-                            onClick={() => handleMarkReceived(restock.id)}
-                            disabled={actionInProgress === restock.id}
-                          >
-                            {actionInProgress === restock.id
-                              ? 'Processing...'
-                              : 'Mark as Received'}
-                          </button>
-                        </div>
+                        <>
+                          <div className="delivery-validation-form">
+                            <h5>Receive Delivery Details</h5>
+                            <div className="form-group">
+                              <label htmlFor={`tracking-${restock.id}`}>Tracking Order Number *</label>
+                              <input
+                                id={`tracking-${restock.id}`}
+                                type="text"
+                                value={deliveryDetails[restock.id]?.trackingNumber || ''}
+                                onChange={(e) =>
+                                  setDeliveryDetails({
+                                    ...deliveryDetails,
+                                    [restock.id]: {
+                                      ...(deliveryDetails[restock.id] || {}),
+                                      trackingNumber: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="form-input"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`company-${restock.id}`}>Delivery Company *</label>
+                              <input
+                                id={`company-${restock.id}`}
+                                type="text"
+                                value={deliveryDetails[restock.id]?.deliveryCompany || ''}
+                                onChange={(e) =>
+                                  setDeliveryDetails({
+                                    ...deliveryDetails,
+                                    [restock.id]: {
+                                      ...(deliveryDetails[restock.id] || {}),
+                                      deliveryCompany: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="form-input"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`deliveredBy-${restock.id}`}>Delivered By *</label>
+                              <input
+                                id={`deliveredBy-${restock.id}`}
+                                type="text"
+                                value={deliveryDetails[restock.id]?.deliveredBy || ''}
+                                onChange={(e) =>
+                                  setDeliveryDetails({
+                                    ...deliveryDetails,
+                                    [restock.id]: {
+                                      ...(deliveryDetails[restock.id] || {}),
+                                      deliveredBy: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="form-input"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`deliveryDate-${restock.id}`}>Delivery Date *</label>
+                              <input
+                                id={`deliveryDate-${restock.id}`}
+                                type="date"
+                                value={deliveryDetails[restock.id]?.deliveryDate || ''}
+                                onChange={(e) =>
+                                  setDeliveryDetails({
+                                    ...deliveryDetails,
+                                    [restock.id]: {
+                                      ...(deliveryDetails[restock.id] || {}),
+                                      deliveryDate: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="form-input"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Received By</label>
+                              <input
+                                type="text"
+                                value={currentUserName}
+                                disabled
+                                className="form-input"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`notes-${restock.id}`}>Notes / Remarks</label>
+                              <textarea
+                                id={`notes-${restock.id}`}
+                                value={deliveryDetails[restock.id]?.notes || ''}
+                                onChange={(e) =>
+                                  setDeliveryDetails({
+                                    ...deliveryDetails,
+                                    [restock.id]: {
+                                      ...(deliveryDetails[restock.id] || {}),
+                                      notes: e.target.value,
+                                    },
+                                  })
+                                }
+                                rows="3"
+                                className="form-textarea"
+                              />
+                            </div>
+                          </div>
+                          <div className="restock-actions">
+                            <button
+                              className="btn-receive"
+                              onClick={() => handleMarkReceived(restock.id)}
+                              disabled={actionInProgress === restock.id}
+                            >
+                              {actionInProgress === restock.id
+                                ? 'Processing...'
+                                : 'Mark as Received'}
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

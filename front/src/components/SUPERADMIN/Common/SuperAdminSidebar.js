@@ -9,6 +9,7 @@ const links = [
   { to: '/superadmin/branches', label: 'Branch Locations', icon: icons.marker },
   { to: '/superadmin/sales', label: 'Processing Sales', icon: icons.cartShoppingFast },
   { to: '/superadmin/inventory', label: 'Inventory Checker', icon: icons.boxOpen },
+  { to: '/superadmin/inventory-logs', label: 'Inventory Logs', icon: icons.clipboardList },
   { to: '/superadmin/tasks', label: 'Processing Tech Tasks', icon: icons.tools },
   { to: '/superadmin/alerts', label: 'Customer Alerts', icon: icons.diamondExclamation }
 ];

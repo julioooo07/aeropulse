@@ -1,6 +1,8 @@
 const Product = require("../models/Product");
+const InventoryTransaction = require("../models/InventoryTransaction");
 const { BRANCHES } = require("../domain/branchRouting");
 const { validateProductUniqueness } = require("../utils/productValidation");
+const { notifyUsersByRoles } = require("../domain/notificationHelper");
 
 const SAMPLE_PRODUCTS = [
   { name: "American Home Inverter AC", sku: "AHAC-MINV1023EHW", brand: "American Home", category: "split", specs: "1.0HP", price: 18499, threshold: 3, stock: 16 },
@@ -198,7 +200,7 @@ const listProducts = async (req, res) => {
 
 const listPublicProducts = async (_req, res) => {
   await ensureSampleInventory();
-  const products = await Product.find({ stock: { $gt: 0 } }).sort({ createdAt: -1 });
+  const products = await Product.find({ isActive: true }).sort({ createdAt: -1 });
   return res.json({ products: products.map((p) => p.toJSON()) });
 };
 
@@ -350,6 +352,29 @@ const restockProduct = async (req, res) => {
   product.stock = summedStock;
   await product.save();
 
+  await InventoryTransaction.create({
+    actionType: "stock_addition",
+    product: product._id,
+    branch: req.authUser.role === "superadmin" ? branch || "" : req.activeBranch,
+    user: req.authUser._id,
+    quantity: qty,
+    referenceType: "product_restock",
+    referenceNumber: String(product.sku || product.name || ""),
+    relatedEntityType: "product",
+    relatedEntityId: product._id,
+    notes: `Manual stock addition for ${product.name}`,
+    productName: product.name,
+  });
+
+  await notifyUsersByRoles({
+    roles: ["admin", "superadmin"],
+    title: "Stock added",
+    message: `Stock for ${product.name} has been increased by ${qty} unit(s) in ${req.authUser.role === "superadmin" ? branch || "all branches" : req.activeBranch}.`,
+    actionUrl: "/admin/inventory",
+    entityType: "product",
+    entityId: String(product._id),
+  });
+
   return res.json({ product: toRoleAwareProduct(product, req) });
 };
 
@@ -384,6 +409,29 @@ const updateBranchStock = async (req, res) => {
   const summedStock = BRANCHES.reduce((sum, name) => sum + Number(product.branchStock?.get(name) || 0), 0);
   product.stock = summedStock;
   await product.save();
+
+  await InventoryTransaction.create({
+    actionType: "stock_addition",
+    product: product._id,
+    branch: scopedBranch,
+    user: req.authUser._id,
+    quantity: qty,
+    referenceType: "branch_stock_update",
+    referenceNumber: String(product.sku || product.name || ""),
+    relatedEntityType: "product",
+    relatedEntityId: product._id,
+    notes: `Branch stock addition for ${product.name}`,
+    productName: product.name,
+  });
+
+  await notifyUsersByRoles({
+    roles: ["admin", "superadmin"],
+    title: "Stock added",
+    message: `Stock for ${product.name} has been increased by ${qty} unit(s) in ${scopedBranch}.`,
+    actionUrl: "/admin/inventory",
+    entityType: "product",
+    entityId: String(product._id),
+  });
 
   return res.json({ product: toRoleAwareProduct(product, req) });
 };
