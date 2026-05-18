@@ -3,11 +3,12 @@ import { StyleSheet, View } from "react-native";
 import { Button, Card, Divider, RadioButton, Text } from "react-native-paper";
 import Screen from "../../components/Screen";
 import { EmptyView, ErrorBanner, LoadingView } from "../../components/StateViews";
-import { computePurchaseTotals, resolvePreferredBranch } from "../../domain/purchase";
+import { computePurchaseTotals, computeStockIssues, resolvePreferredBranch } from "../../domain/purchase";
 import { OrdersApi, ProductsApi, UsersApi } from "../../services/api";
 import { useCart } from "../../state/CartContext";
 import { colors, spacing } from "../../theme/theme";
 import { normalizeAddress, peso } from "../../utils/format";
+import { validateAddressForm } from "../../utils/validators";
 
 export default function CheckoutScreen({ navigation }) {
   const { cart, subtotal, clearCart, syncCartStock } = useCart();
@@ -17,6 +18,8 @@ export default function CheckoutScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [stockIssues, setStockIssues] = useState([]);
+  const [stockCheckedAt, setStockCheckedAt] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,20 +36,51 @@ export default function CheckoutScreen({ navigation }) {
     }
   }, []);
 
-  React.useEffect(() => { load(); }, [load]);
+  const verifyStock = useCallback(async () => {
+    const latestProducts = await ProductsApi.public();
+    const issues = computeStockIssues(cart, latestProducts.products || []);
+    setStockIssues(issues);
+    setStockCheckedAt(new Date().toISOString());
+    return issues;
+  }, [cart]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  React.useEffect(() => {
+    verifyStock();
+  }, [verifyStock]);
 
   const selectedAddress = addresses.find((item) => item.id === selectedId);
   const branch = selectedAddress ? resolvePreferredBranch(selectedAddress) : "";
-  const totals = useMemo(() => computePurchaseTotals({ subtotal, serviceAreaId: branch.toLowerCase() }), [subtotal, branch]);
+  const totals = useMemo(
+    () => computePurchaseTotals({ subtotal, serviceAreaId: branch.toLowerCase() }),
+    [subtotal, branch],
+  );
 
   const placeOrder = async () => {
     setBusy(true);
     setError("");
+
     try {
-      const latestProducts = await ProductsApi.public();
-      const mappedProducts = (latestProducts.products || []).map((item) => ({ id: item.id, sku: item.sku, stock: Number(item.stock || 0) }));
-      syncCartStock(mappedProducts);
-      if (!selectedAddress) throw new Error("Please select a delivery address.");
+      const issues = await verifyStock();
+      if (issues.length > 0) {
+        setError("Some items are no longer available. Please update your cart and try again.");
+        return;
+      }
+
+      if (!selectedAddress) {
+        setError("Please select a delivery address.");
+        return;
+      }
+
+      const addressValidation = validateAddressForm(selectedAddress);
+      if (!addressValidation.valid) {
+        setError(Object.values(addressValidation.errors)[0]);
+        return;
+      }
+
       const result = await OrdersApi.create({
         items: cart,
         addressId: selectedAddress.id,
@@ -64,7 +98,12 @@ export default function CheckoutScreen({ navigation }) {
   };
 
   if (loading) return <LoadingView label="Preparing checkout..." />;
-  if (cart.length === 0) return <Screen><EmptyView title="Cart is empty" actionLabel="Shop products" onAction={() => navigation.navigate("Shop")} /></Screen>;
+  if (cart.length === 0)
+    return (
+      <Screen>
+        <EmptyView title="Cart is empty" actionLabel="Shop products" onAction={() => navigation.navigate("Shop")} />
+      </Screen>
+    );
 
   return (
     <Screen>
@@ -82,7 +121,9 @@ export default function CheckoutScreen({ navigation }) {
               onPress={() => setSelectedId(item.id)}
             />
           ))}
-          <Button mode="outlined" onPress={() => navigation.navigate("AddressForm", { onSaved: "Checkout" })}>Add address</Button>
+          <Button mode="outlined" onPress={() => navigation.navigate("AddressForm", { onSaved: "Checkout" })}>
+            Add address
+          </Button>
         </Card.Content>
       </Card>
       <Card style={styles.card}>
@@ -96,10 +137,27 @@ export default function CheckoutScreen({ navigation }) {
         </Card.Content>
       </Card>
       {branch ? <Text style={styles.branch}>Fulfillment branch: {branch}</Text> : null}
+      {stockIssues.length > 0 ? (
+        <Card style={styles.stockCard}>
+          <Card.Content style={styles.gap}>
+            <Text variant="titleMedium">Stock issues detected</Text>
+            {stockIssues.map((issue) => (
+              <Text key={`${issue.id}-${issue.code}`}>
+                {issue.name}: requested {issue.desired}, available {issue.available}
+              </Text>
+            ))}
+            {stockCheckedAt ? <Text style={styles.stockTimestamp}>Last checked: {new Date(stockCheckedAt).toLocaleTimeString()}</Text> : null}
+          </Card.Content>
+        </Card>
+      ) : null}
       <Card style={styles.card}>
         <Card.Content style={styles.gap}>
           <Text variant="titleMedium">Order summary</Text>
-          {cart.map((item) => <Text key={item.id}>{item.name} x{item.quantity} • {peso(item.price * item.quantity)}</Text>)}
+          {cart.map((item) => (
+            <Text key={item.id}>
+              {item.name} x{item.quantity} • {peso(item.price * item.quantity)}
+            </Text>
+          ))}
           <Divider />
           <Row label="Subtotal" value={peso(totals.subtotal)} />
           <Row label="VAT" value={peso(totals.vatAmount)} />
@@ -107,18 +165,27 @@ export default function CheckoutScreen({ navigation }) {
           <Row label="Total" value={peso(totals.total)} strong />
         </Card.Content>
       </Card>
-      <Button mode="contained" loading={busy} disabled={busy || !selectedAddress} onPress={placeOrder}>Place order</Button>
+      <Button mode="contained" loading={busy} disabled={busy || !selectedAddress || stockIssues.length > 0} onPress={placeOrder}>
+        Place order
+      </Button>
     </Screen>
   );
 }
 
 function Row({ label, value, strong }) {
-  return <View style={styles.row}><Text variant={strong ? "titleMedium" : "bodyMedium"}>{label}</Text><Text variant={strong ? "titleMedium" : "bodyMedium"}>{value}</Text></View>;
+  return (
+    <View style={styles.row}>
+      <Text variant={strong ? "titleMedium" : "bodyMedium"}>{label}</Text>
+      <Text variant={strong ? "titleMedium" : "bodyMedium"}>{value}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   card: { borderRadius: 8 },
+  stockCard: { borderRadius: 8, borderWidth: 1, borderColor: colors.error, backgroundColor: "#fff4f4" },
   gap: { gap: spacing.sm },
   row: { flexDirection: "row", justifyContent: "space-between" },
-  branch: { color: colors.primaryDark, fontWeight: "700" }
+  branch: { color: colors.primaryDark, fontWeight: "700" },
+  stockTimestamp: { color: colors.muted, fontSize: 12 }
 });

@@ -5,6 +5,7 @@ import Screen from "../../components/Screen";
 import { ErrorBanner } from "../../components/StateViews";
 import { BRANCHES } from "../../config/env";
 import { useAuth } from "../../state/AuthContext";
+import { validateLoginForm } from "../../utils/validators";
 import { colors, spacing } from "../../theme/theme";
 
 export default function LoginScreen({ navigation }) {
@@ -19,6 +20,14 @@ export default function LoginScreen({ navigation }) {
   const submit = async () => {
     setBusy(true);
     setError("");
+
+    const validation = validateLoginForm({ identifier, password });
+    if (!validation.valid) {
+      setError(Object.values(validation.errors)[0]);
+      setBusy(false);
+      return;
+    }
+
     try {
       await login({ identifier, password, branch });
     } catch (err) {
@@ -35,16 +44,36 @@ export default function LoginScreen({ navigation }) {
         <Text style={styles.subtitle}>Customer POS and technician work orders</Text>
       </View>
       <ErrorBanner message={error} />
-      <TextInput label="Email or alias" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" mode="outlined" />
-      <TextInput label="Password" value={password} onChangeText={setPassword} secureTextEntry mode="outlined" />
+      <TextInput
+        label="Email or alias"
+        value={identifier}
+        onChangeText={setIdentifier}
+        autoCapitalize="none"
+        mode="outlined"
+      />
+      <TextInput
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        mode="outlined"
+      />
       <Menu
         visible={showBranches}
         onDismiss={() => setShowBranches(false)}
-        anchor={<Button mode="outlined" onPress={() => setShowBranches(true)}>{branch || "Select branch for technician login"}</Button>}
+        anchor={
+          <Button mode="outlined" onPress={() => setShowBranches(true)}>
+            {branch || "Select branch for technician login"}
+          </Button>
+        }
       >
         <Menu.Item title="No branch / customer" onPress={() => { setBranch(""); setShowBranches(false); }} />
         {BRANCHES.map((item) => (
-          <Menu.Item key={item} title={item} onPress={() => { setBranch(item); setShowBranches(false); }} />
+          <Menu.Item
+            key={item}
+            title={item}
+            onPress={() => { setBranch(item); setShowBranches(false); }}
+          />
         ))}
       </Menu>
       <Button mode="contained" loading={busy} disabled={busy} onPress={submit} icon="login">
