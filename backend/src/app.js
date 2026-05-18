@@ -29,7 +29,20 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.corsOrigin,
+    origin: (origin, callback) => {
+      // Allow requests without origin (server-to-server or same-origin)
+      if (!origin) return callback(null, true);
+      // In development, allow any localhost origin (covers Expo web ports)
+      if (env.nodeEnv !== "production" && /https?:\/\/localhost(:\d+)?/.test(origin)) {
+        return callback(null, true);
+      }
+      // Otherwise allow only configured origins
+      const allowed = Array.isArray(env.corsOrigin)
+        ? env.corsOrigin
+        : [env.corsOrigin];
+      if (allowed.includes(origin)) return callback(null, true);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   }),
 );

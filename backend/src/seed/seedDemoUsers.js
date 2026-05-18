@@ -49,6 +49,18 @@ const users = [
     activeBranch: "Bulacan",
   },
   {
+    email: "superadmin@example.com",
+    password: "superadmin123",
+    name: "Super Admin User",
+    name_first: "Super",
+    name_last: "Admin",
+    phone: "09123456782",
+    address: "HQ Command Center",
+    role: "superadmin",
+    assignedBranch: "",
+    activeBranch: "",
+  },
+  {
     email: "tech@example.com",
     password: "tech123",
     name: "Technician User",

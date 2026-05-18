@@ -21,9 +21,9 @@ export default function LoginForm({
   return (
     <form className="bq-login-step" onSubmit={handleSubmit}>
       <BoutiqueInput
-        label="Sign-In Alias"
+        label="Sign-In ID"
         icon={UserCircle}
-        placeholder="juan.dc"
+        placeholder="email, phone, username, or alias"
         value={identifier}
         onChange={(e) => onIdentifierChange(e.target.value)}
         disabled={disabled}

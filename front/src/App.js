@@ -85,7 +85,11 @@ const RoleRoute = ({ allowedRoles, children }) => {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  return allowedRoles.includes(userRole) ? (
+  const canAccess =
+    allowedRoles.includes(userRole) ||
+    (userRole === "superadmin" && allowedRoles.includes("admin"));
+
+  return canAccess ? (
     children
   ) : (
     <Navigate to="/home" replace />
