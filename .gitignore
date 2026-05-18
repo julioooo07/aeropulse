@@ -2,7 +2,10 @@
 
 # dependencies
 /node_modules
+<<<<<<< HEAD
 **/node_modules
+=======
+>>>>>>> b0bebfe2d653784de7e30e8f20efb0d253b1fccc
 /mobile/node_modules
 /front/node_modules
 /.pnp
