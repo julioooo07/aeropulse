@@ -3,9 +3,11 @@ const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const session = require("express-session");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const env = require("./config/env");
+
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -25,9 +27,32 @@ const { handleValidationError } = require("./middleware/validation");
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigin }));
+app.use(
+  cors({
+    origin: env.corsOrigin,
+    credentials: true,
+  }),
+);
 app.use(morgan("dev"));
-app.use(cookieParser());
+
+// Switch to express-session for server-side persistence
+// This ensures server restarts wipe all sessions (default in-memory store)
+app.use(
+  session({
+    name: "aeropulse.sid",
+    secret: env.jwtSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      httpOnly: true,
+      secure: env.nodeEnv === "production",
+      sameSite: "lax",
+    },
+  }),
+);
+
+app.use(cookieParser(env.jwtSecret));
 app.use(express.json({ limit: "5mb" }));
 
 app.get("/api/health", (_req, res) => {
@@ -50,14 +75,14 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/ai", aiRoutes);
 app.use(handleValidationError);
 
-const buildPath = path.resolve(__dirname, '..', '..', 'front', 'build');
-const indexHtml = path.join(buildPath, 'index.html');
+const buildPath = path.resolve(__dirname, "..", "..", "front", "build");
+const indexHtml = path.join(buildPath, "index.html");
 
 if (fs.existsSync(indexHtml)) {
   app.use(express.static(buildPath));
 
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) {
       return next();
     }
     res.sendFile(indexHtml);

@@ -1,102 +1,46 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const speakeasy = require("speakeasy");
+const zxcvbn = require("zxcvbn");
 const User = require("../models/User");
-const OtpRequest = require("../models/OtpRequest");
+const OtpRequest = require("../models/OtpRequest"); // Symmetrical V3 Model
 const AuditLog = require("../models/AuditLog");
 const { signAccessToken } = require("../utils/token");
 const env = require("../config/env");
-const { BRANCHES, resolvePreferredBranch } = require("../domain/branchRouting");
+const { BRANCHES } = require("../domain/branchRouting");
 const { canSendEmail, sendEmail } = require("../utils/email");
 
-const PASSWORD_RESET_MINUTES = Math.max(15, Math.min(30, Number(env.passwordResetTokenTtlMinutes || 20)));
-const OTP_TTL_MINUTES = Math.max(3, Math.min(15, Number(env.otpTtlMinutes || 5)));
+const OTP_TTL_MINUTES = Math.max(
+  3,
+  Math.min(15, Number(env.otpTtlMinutes || 5)),
+);
 
 const normalizeEmail = (email = "") => String(email).trim().toLowerCase();
 const normalizeIdentifier = (value = "") => String(value).trim().toLowerCase();
 const normalizePhone = (phone = "") => String(phone).replace(/\D/g, "");
 const canonicalizePhMobile = (phone = "") => {
   const digits = normalizePhone(phone);
-  if (/^639\d{9}$/.test(digits)) {
-    return `09${digits.slice(3)}`;
+  if (/^639\d{9}$/.test(digits)) return `09${digits.slice(3)}`;
+  return digits;
+};
+const isValidSixDigitCode = (value = "") =>
+  /^\d{6}$/.test(String(value).trim());
+
+const toInternationalFormat = (phone = "") => {
+  const digits = String(phone).replace(/\D/g, "");
+  if (digits.startsWith("09") && digits.length === 11) {
+    return `639${digits.slice(2)}`;
   }
   return digits;
 };
-const isValidPhMobile = (phone = "") => /^09\d{9}$/.test(canonicalizePhMobile(phone));
-const isValidSixDigitCode = (value = "") => /^\d{6}$/.test(String(value).trim());
-const isStrongPassword = (value = "") => {
-  const password = String(value);
-  if (password.length < 8) return false;
-  if (!/(?=.*[a-z])/.test(password)) return false;
-  if (!/(?=.*[A-Z])/.test(password)) return false;
-  if (!/(?=.*\d)/.test(password)) return false;
-  if (!/(?=.*[@$!%*?&])/.test(password)) return false;
-  return true;
-};
 
-const validateLocationCoordinates = (coordinates = {}) => {
-  const { latitude, longitude, accuracy } = coordinates;
-  const errors = {};
-
-  if (latitude !== undefined && (latitude < -90 || latitude > 90)) {
-    errors.latitude = "Latitude must be between -90 and 90";
-  }
-  if (longitude !== undefined && (longitude < -180 || longitude > 180)) {
-    errors.longitude = "Longitude must be between -180 and 180";
-  }
-  if (accuracy !== undefined && accuracy < 0) {
-    errors.accuracy = "Accuracy must be non-negative";
-  }
-
-  return Object.keys(errors).length > 0 ? errors : null;
-};
-
-const normalizeLocationData = (location = {}) => {
-  const normalized = {
-    coordinates: {},
-    address: {},
-    capturedAt: new Date(),
-    source: "manual",
-  };
-
-  // Normalize coordinates
-  if (location.coordinates) {
-    const { latitude, longitude, accuracy, timestamp } = location.coordinates;
-    if (typeof latitude === "number" && latitude >= -90 && latitude <= 90) {
-      normalized.coordinates.latitude = latitude;
-    }
-    if (typeof longitude === "number" && longitude >= -180 && longitude <= 180) {
-      normalized.coordinates.longitude = longitude;
-    }
-    if (typeof accuracy === "number" && accuracy >= 0) {
-      normalized.coordinates.accuracy = accuracy;
-    }
-    if (timestamp) {
-      normalized.coordinates.timestamp = new Date(timestamp);
-    }
-  }
-
-  // Normalize address
-  if (location.address) {
-    const { region, province, city, barangay, street, postalCode } = location.address;
-    if (region) normalized.address.region = String(region).trim();
-    if (province) normalized.address.province = String(province).trim();
-    if (city) normalized.address.city = String(city).trim();
-    if (barangay) normalized.address.barangay = String(barangay).trim();
-    if (street) normalized.address.street = String(street).trim();
-    if (postalCode) normalized.address.postalCode = String(postalCode).trim();
-  }
-
-  // Set source
-  if (location.source && ["gps", "manual", "ip"].includes(location.source)) {
-    normalized.source = location.source;
-  }
-
-  return normalized;
-};
-
-const generateOtpCode = () => String(Math.floor(100000 + Math.random() * 900000)).padStart(6, "0");
-const hashValue = (value = "") => crypto.createHash("sha256").update(String(value)).digest("hex");
-const isOtpExpired = (otp) => !otp || !otp.expiresAt || otp.expiresAt.getTime() < Date.now();
+const generateOtpCode = () =>
+  String(Math.floor(100000 + Math.random() * 900000)).padStart(6, "0");
+const hashValue = (value = "") =>
+  crypto.createHash("sha256").update(String(value)).digest("hex");
+const isOtpExpired = (otp) =>
+  !otp || !otp.expiresAt || otp.expiresAt.getTime() < Date.now();
 
 const sendOtpMessage = async ({ recipient, channel, action, code }) => {
   const subject = `Your AeroPulse verification code`;
@@ -111,25 +55,80 @@ const sendOtpMessage = async ({ recipient, channel, action, code }) => {
         html: `<p>${message}</p><p>If you did not request this, ignore this message.</p>`,
       });
     } else {
-      console.log("[OTP] Email not configured. OTP code:", code, "for", recipient);
+      console.log("[OTP] Email code:", code, "for", recipient);
     }
     return;
   }
 
   if (channel === "sms") {
-    console.log("[OTP] SMS placeholder code:", code, "for", recipient);
+    console.log("[OTP] SMS code:", code, "for", recipient);
+
+    if (env.infobipApiKey) {
+      try {
+        const intlRecipient = toInternationalFormat(recipient);
+        const res = await fetch(
+          `https://${env.infobipBaseUrl}/sms/2/text/advanced`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `App ${env.infobipApiKey}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              messages: [
+                {
+                  from: env.infobipSender,
+                  destinations: [{ to: intlRecipient }],
+                  text: message,
+                },
+              ],
+            }),
+          },
+        );
+
+        const data = await res.json();
+        if (res.ok) {
+          console.log(
+            `[INFOBIP] SMS dispatched to ${intlRecipient}. ID:`,
+            data.messages?.[0]?.messageId,
+          );
+        } else {
+          console.error(`[INFOBIP] Dispatch failed:`, data);
+        }
+      } catch (err) {
+        console.error("[INFOBIP] Error:", err.message);
+      }
+    }
+    return;
+  }
+
+  if (channel === "messenger") {
+    console.log("[OTP] Messenger code:", code, "for", recipient);
     return;
   }
 };
 
-const createOtpRequest = async ({ email = "", phone = "", action, channel, metadata = {} }) => {
+/**
+ * SYMMETRICAL OTP HELPERS
+ */
+const createOtpRequest = async ({
+  email = "",
+  phone = "",
+  messenger_handle = "",
+  action,
+  channel,
+  metadata = {},
+}) => {
   const code = generateOtpCode();
   const codeHash = hashValue(code);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + OTP_TTL_MINUTES * 60 * 1000);
+
   const otpRequest = await OtpRequest.create({
     email: normalizeEmail(email),
     phone: canonicalizePhMobile(phone),
+    messenger_handle: String(messenger_handle || "").trim(),
     action,
     channel,
     codeHash,
@@ -139,818 +138,484 @@ const createOtpRequest = async ({ email = "", phone = "", action, channel, metad
   });
 
   await sendOtpMessage({
-    recipient: channel === "email" ? normalizeEmail(email) : canonicalizePhMobile(phone),
+    recipient: email || phone || messenger_handle,
     channel,
     action,
     code,
   });
 
-  return otpRequest;
+  console.log("\n╔══════════════════════════════════════════════════════╗");
+  console.log(
+    "║ [OTP] GENERATED FOR:",
+    channel.toUpperCase().padEnd(26, " "),
+    "║",
+  );
+  console.log("║ ACTION:   ", action.padEnd(42, " "), "║");
+  console.log(
+    "║ RECIPIENT:",
+    (email || phone || messenger_handle).padEnd(42, " "),
+    "║",
+  );
+  console.log("║ CODE:     ", code.padEnd(42, " "), "║");
+  console.log("╚══════════════════════════════════════════════════════╝\n");
+
+  return { otpRequest, code };
 };
 
-const findOtpRequest = async ({ email = "", phone = "", action, channel }) => {
+const findOtpRequest = async ({
+  email = "",
+  phone = "",
+  messenger_handle = "",
+  action,
+  channel,
+}) => {
   const query = { action, channel, verifiedAt: null };
   if (email) query.email = normalizeEmail(email);
   if (phone) query.phone = canonicalizePhMobile(phone);
+  if (messenger_handle)
+    query.messenger_handle = String(messenger_handle).trim();
   return OtpRequest.findOne(query).sort({ createdAt: -1 });
 };
 
-const verifyOtpRequest = async ({ email = "", phone = "", action, channel, code }) => {
-  const otp = await findOtpRequest({ email, phone, action, channel });
-  if (!otp) {
-    return { ok: false, reason: "not_found" };
-  }
-  if (isOtpExpired(otp)) {
-    return { ok: false, reason: "expired" };
-  }
+const verifyOtpRequest = async ({
+  email = "",
+  phone = "",
+  messenger_handle = "",
+  action,
+  channel,
+  code,
+}) => {
+  const otp = await findOtpRequest({
+    email,
+    phone,
+    messenger_handle,
+    action,
+    channel,
+  });
+  if (!otp) return { ok: false, reason: "not_found" };
+  if (isOtpExpired(otp)) return { ok: false, reason: "expired" };
 
-  otp.attempts = (otp.attempts || 0) + 1;
-  const isValid = hashValue(code) === otp.codeHash;
-  if (!isValid) {
-    await otp.save();
-    return { ok: false, reason: "invalid" };
-  }
+  if (otp.codeHash !== hashValue(code)) return { ok: false, reason: "invalid" };
 
   otp.verifiedAt = new Date();
   await otp.save();
-  return { ok: true, otp };
+  return { ok: true };
 };
 
-const normalizeBillingAddress = (payload = {}) => ({
-  region: String(payload.region || "").trim(),
-  province: String(payload.province || "").trim(),
-  city: String(payload.city || "").trim(),
-  barangay: String(payload.barangay || "").trim(),
-  street: String(payload.street || "").trim(),
-});
+/**
+ * PRIMARY CONTROLLERS
+ */
+const requestOtp = async (req, res) => {
+  const { action, channel, email, phone, messenger_handle } = req.body;
 
-const escapeRegExp = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const findUserByIdentifier = async (identifier = "") => {
-  const normalizedIdentifier = normalizeIdentifier(identifier);
-  if (!normalizedIdentifier) return null;
-
-  const emailQuery = { email: normalizedIdentifier };
-  const usernameQuery = { username: normalizedIdentifier };
-
-  return User.findOne({ $or: [emailQuery, usernameQuery] });
-};
-
-const formatBillingAddress = (billingAddress = {}) => ([
-  billingAddress.street,
-  billingAddress.barangay,
-  billingAddress.city,
-  billingAddress.province,
-  billingAddress.region,
-]
-  .filter(Boolean)
-  .join(", "));
-
-const isBillingAddressComplete = (billingAddress = {}) => {
-  if (!billingAddress.region) return false;
-  if (!billingAddress.province) return false;
-  if (!billingAddress.city) return false;
-  if (!billingAddress.barangay) return false;
-  if (!billingAddress.street) return false;
-  return true;
-};
-
-const detectRoleFromEmail = (email = "") => {
-  const normalizedEmail = String(email).trim().toLowerCase();
-  if (normalizedEmail.includes("superadmin")) return "superadmin";
-  if (normalizedEmail.includes("technician") || normalizedEmail.includes("tech")) return "technician";
-  if (normalizedEmail.includes("admin")) return "admin";
-  return "customer";
-};
-
-const lockoutSecondsForAttemptCount = (attempts) => {
-  if (attempts < 3) return 0;
-  const ms = 60_000 + (attempts - 3) * 30_000;
-  return Math.ceil(ms / 1000);
-};
-
-const getOAuthCookieOptions = (req) => ({
-  httpOnly: true,
-  sameSite: "lax",
-  secure: Boolean(req.secure || String(env.frontendUrl || "").startsWith("https://")),
-  maxAge: 10 * 60 * 1000,
-  path: "/",
-});
-
-const generatePasswordResetToken = () => {
-  const nonce = crypto.randomBytes(24).toString("hex");
-  const createdAt = Date.now().toString();
-  const payload = `${nonce}.${createdAt}`;
-  const signature = crypto
-    .createHmac("sha256", env.passwordResetTokenSecret)
-    .update(payload)
-    .digest("hex");
-  const token = `${payload}.${signature}`;
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  return { token, tokenHash };
-};
-
-const parseAndVerifyPasswordResetToken = (token = "") => {
-  const [nonce = "", createdAtRaw = "", signature = ""] = String(token).split(".");
-  if (!nonce || !createdAtRaw || !signature) {
-    return { ok: false, reason: "invalid" };
-  }
-  if (!/^\d+$/.test(createdAtRaw)) {
-    return { ok: false, reason: "invalid" };
+  if (!action || !channel) {
+    return res
+      .status(400)
+      .json({ message: "Action and channel are required." });
   }
 
-  const payload = `${nonce}.${createdAtRaw}`;
-  const expected = crypto
-    .createHmac("sha256", env.passwordResetTokenSecret)
-    .update(payload)
-    .digest("hex");
-
-  if (!/^[a-f0-9]+$/i.test(signature) || signature.length !== expected.length) {
-    return { ok: false, reason: "invalid" };
+  // 1. Validation for specific actions
+  if (action === "register_email" && !email) {
+    return res.status(400).json({ message: "Email required." });
+  }
+  if (action === "register_phone" && !phone) {
+    return res.status(400).json({ message: "Phone required." });
+  }
+  if (action === "register_messenger" && !messenger_handle) {
+    return res.status(400).json({ message: "Messenger handle required." });
   }
 
-  const isSigValid = crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
-  if (!isSigValid) {
-    return { ok: false, reason: "invalid" };
+  // 2. Uniqueness checks
+  if (
+    action === "register_email" &&
+    (await User.findOne({ email: normalizeEmail(email) }))
+  ) {
+    return res.status(409).json({ message: "Email already exists." });
+  }
+  if (
+    action === "register_phone" &&
+    (await User.findOne({ phone: canonicalizePhMobile(phone) }))
+  ) {
+    return res.status(409).json({ message: "Phone already exists." });
   }
 
-  return {
-    ok: true,
-    tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+  try {
+    const { code } = await createOtpRequest({
+      email,
+      phone,
+      messenger_handle,
+      action,
+      channel,
+    });
+
+    return res.json({ message: "Code sent successfully.", debugCode: code });
+  } catch (err) {
+    console.error("[OTP] Error:", err);
+    return res.status(500).json({ message: "Error processing OTP request." });
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const { action, channel, email, phone, messenger_handle, code } = req.body;
+
+  if (!action || !code) {
+    return res.status(400).json({ message: "Action and code required." });
+  }
+
+  try {
+    const verification = await verifyOtpRequest({
+      email,
+      phone,
+      messenger_handle,
+      action,
+      channel,
+      code,
+    });
+
+    if (!verification.ok) {
+      return res.status(400).json({ message: "Invalid or expired code." });
+    }
+
+    // Persistent Session Sync
+    if (req.session.registrationProgress) {
+      const data = req.session.registrationProgress.formData;
+      if (action === "register_phone") {
+        data.phone = canonicalizePhMobile(phone);
+        data.phoneVerified = true;
+      } else if (action === "register_messenger") {
+        data.messengerHandle = messenger_handle;
+        data.messengerVerified = true;
+      }
+    }
+
+    return res.json({ message: "Verification successful." });
+  } catch (err) {
+    console.error("[OTP] Verify Error:", err);
+    return res.status(500).json({ message: "Error verifying OTP." });
+  }
+};
+
+const checkAliasAvailability = async (req, res) => {
+  const alias = String(req.query.alias || "")
+    .trim()
+    .toLowerCase();
+  if (!alias) {
+    return res.status(400).json({ message: "Alias is required." });
+  }
+
+  try {
+    const existing = await User.findOne({
+      $or: [{ alias }, { username: alias }],
+    });
+    return res.json({ available: !existing });
+  } catch (err) {
+    return res.status(500).json({ message: "Error checking alias." });
+  }
+};
+
+const startRegistration = async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res
+      .status(400)
+      .json({ errors: { email: "Valid email is required" } });
+  }
+
+  const existing = await User.findOne({ email });
+  if (existing) {
+    return res.status(409).json({ errors: { email: "Email already exists" } });
+  }
+
+  let finalSecret = "";
+  let finalUri = "";
+  let verifiedCode = null;
+
+  // 1. Check for RESUME state in the session
+  const progress = req.session.registrationProgress;
+  if (
+    progress &&
+    normalizeEmail(progress.email || progress.formData?.email) === email
+  ) {
+    if (progress.formData?.registrationSecret) {
+      finalSecret = progress.formData.registrationSecret;
+      finalUri = progress.formData.provisioningUri;
+      verifiedCode = progress.formData.verifiedCode;
+    }
+  }
+
+  if (
+    !finalSecret &&
+    req.session.tempRegistrationSecret &&
+    normalizeEmail(req.session.tempRegistrationEmail) === email
+  ) {
+    finalSecret = req.session.tempRegistrationSecret;
+    finalUri = req.session.tempProvisioningUri;
+  }
+
+  // 2. FRESH START: If no session state, proactively PURGE all database artifacts for this email (Technical Cascade)
+  if (!finalSecret) {
+    console.log(
+      `[BOUTIQUE] Fresh start for ${email}. Purging existing database artifacts...`,
+    );
+    await OtpRequest.deleteMany({ email });
+
+    const secret = speakeasy.generateSecret({
+      length: 20,
+      name: `AeroPulse:${email}`,
+    });
+    finalSecret = secret.base32;
+    finalUri = secret.otpauth_url;
+
+    req.session.tempRegistrationSecret = finalSecret;
+    req.session.tempProvisioningUri = finalUri;
+    req.session.tempRegistrationEmail = email;
+  }
+
+  const currentToken = speakeasy.totp({
+    secret: finalSecret,
+    encoding: "base32",
+  });
+
+  console.log("\n╔══════════════════════════════════════════════════════╗");
+  console.log("║ [TOTP] SECRET FOR:", email.padEnd(33, " "), "║");
+  console.log("║ BASE32 SECRET:    ", finalSecret.padEnd(33, " "), "║");
+  console.log("║ CURRENT TOKEN:    ", currentToken.padEnd(33, " "), "║");
+  if (verifiedCode)
+    console.log("║ STATUS:            ALREADY VERIFIED".padEnd(55, " "), "║");
+  console.log("╚══════════════════════════════════════════════════════╝\n");
+
+  return res.json({
+    email,
+    secret: finalSecret,
+    provisioningUri: finalUri,
+    verifiedCode,
+  });
+};
+
+const verifyRegistrationCode = async (req, res) => {
+  const { email, code, secret } = req.body;
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail || !code || !secret) {
+    return res.status(400).json({ message: "Data required." });
+  }
+
+  const isValid = speakeasy.totp.verify({
+    secret: secret,
+    encoding: "base32",
+    token: code,
+    window: 1,
+  });
+  if (!isValid) return res.status(400).json({ message: "Invalid code." });
+
+  // Mark in database as verified
+  await OtpRequest.findOneAndUpdate(
+    { email: normalizedEmail, action: "register_email", verifiedAt: null },
+    { $set: { verifiedAt: new Date() } },
+    { sort: { createdAt: -1 } },
+  );
+
+  req.session.registrationProgress = {
+    email: normalizedEmail,
+    stepIndex: 3,
+    formData: {
+      email: normalizedEmail,
+      registrationSecret: secret,
+      verifiedCode: code,
+    },
   };
-};
 
-const clearPasswordResetState = (user) => {
-  user.passwordReset = {
-    tokenHash: "",
-    expiresAt: null,
-    usedAt: null,
-    requestedAt: null,
-  };
+  return res.json({
+    message: "Success",
+    registrationProgress: req.session.registrationProgress,
+  });
 };
 
 const register = async (req, res) => {
   const {
-    email,
-    password,
-    name,
     name_first,
     name_last,
     alias,
+    email,
     phone,
-    address = "",
-    billingAddress,
-    role, // Allow explicit role specification for mobile
-    branch, // Branch selection for staff roles
-    location, // Location data: { coordinates, address, source }
+    password,
+    messenger_handle,
+    locations = [],
+    role,
+    branch,
   } = req.body;
+  try {
+    const normalizedEmail = normalizeEmail(email);
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
 
-  const normalizedEmail = normalizeEmail(email);
-  const errors = {};
+    // Auto-generate alias from email if not provided (Technical Fallback)
+    const finalAlias = (alias || normalizedEmail.split("@")[0] || "")
+      .toLowerCase()
+      .trim();
 
-  console.log("[Auth][Register] Request received", {
-    email: normalizedEmail || "(missing)",
-    hasPhone: Boolean(phone),
-    requestedRole: role,
-    requestedBranch: branch,
-  });
+    const primaryLoc = locations[0] || null;
+    const addressString = primaryLoc
+      ? `${primaryLoc.address.street}, ${primaryLoc.address.city}, ${primaryLoc.address.province}`.trim()
+      : "";
 
-  // Validate required fields
-  if (!normalizedEmail) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    errors.email = "Email must be a valid email address";
+    const newUser = await User.create({
+      name: `${name_first} ${name_last}`,
+      name_first,
+      name_last,
+      alias: finalAlias,
+      email: normalizedEmail,
+      phone: canonicalizePhMobile(phone),
+      passwordHash,
+      messenger_handle,
+      role: role || "customer",
+      assignedBranch: branch || "",
+      address: addressString,
+      billingAddress: primaryLoc ? primaryLoc.address : {},
+      location: primaryLoc || { address: {}, coordinates: {} },
+      addresses: locations.map((loc, idx) => ({
+        ...loc.address,
+        label: `Facility ${idx + 1}`,
+        isDefault: idx === 0,
+      })),
+      accountStatus: "active",
+    });
+
+    // Final database purge for this email after successful registration
+    await OtpRequest.deleteMany({ email: normalizedEmail });
+    if (req.session) req.session.destroy();
+
+    const token = signAccessToken({ sub: newUser.id, role: newUser.role });
+    return res.json({ success: true, token, user: newUser.toJSON() });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
-
-  if (!name_first || !String(name_first).trim()) {
-    errors.name_first = "First name is required";
-  } else if (String(name_first).length < 2) {
-    errors.name_first = "First name must be at least 2 characters";
-  } else if (!/^[a-zA-Z\s]+$/.test(String(name_first))) {
-    errors.name_first = "First name can only contain letters";
-  }
-
-  if (!name_last || !String(name_last).trim()) {
-    errors.name_last = "Last name is required";
-  } else if (String(name_last).length < 2) {
-    errors.name_last = "Last name must be at least 2 characters";
-  } else if (!/^[a-zA-Z\s]+$/.test(String(name_last))) {
-    errors.name_last = "Last name can only contain letters";
-  }
-
-  if (!phone) {
-    errors.phone = "Phone number is required";
-  } else if (!isValidPhMobile(phone)) {
-    errors.phone = "Phone number must be a valid Philippine mobile number (09XXXXXXXXX or 639XXXXXXXXX)";
-  }
-
-  if (!password) {
-    errors.password = "Password is required";
-  } else if (!isStrongPassword(password)) {
-    errors.password = "Password must be at least 8 characters with uppercase, lowercase, number, and special character";
-  }
-
-  if (alias) {
-    const normalizedUsername = String(alias).trim().toLowerCase();
-    if (normalizedUsername.length < 2 || normalizedUsername.length > 30 || !/^[a-z0-9_.-]+$/.test(normalizedUsername)) {
-      errors.alias = "Alias must be 2-30 characters and contain only letters, numbers, dot, underscore, hyphen";
-    }
-  }
-
-  // Validate location if provided
-  if (location) {
-    const locationErrors = validateLocationCoordinates(location.coordinates || {});
-    if (locationErrors) {
-      Object.assign(errors, locationErrors);
-    }
-  }
-
-  // If validation errors, return them all at once
-  if (Object.keys(errors).length > 0) {
-    console.warn("[Auth][Register] Validation failed", { email: normalizedEmail, errors });
-    return res.status(400).json({ errors });
-  }
-
-  const normalizedPhone = canonicalizePhMobile(phone);
-  const normalizedUsername = typeof alias === "string" ? alias.trim().toLowerCase() : "";
-  // Use explicit role if provided, otherwise detect from email
-  const userRole = role && ["customer", "technician", "admin", "superadmin"].includes(role) ? role : detectRoleFromEmail(normalizedEmail);
-  const normalizedBillingAddress = normalizeBillingAddress(billingAddress || {});
-  const composedBillingAddress = formatBillingAddress(normalizedBillingAddress);
-  const normalizedAddress = typeof address === "string" ? address.trim() : "";
-  const normalizedLocation = location ? normalizeLocationData(location) : null;
-
-  // Branch handling based on role
-  let assignedBranch = "";
-  if (userRole === "customer") {
-    // Auto-assign branch based on location for customers
-    if (isBillingAddressComplete(normalizedBillingAddress)) {
-      assignedBranch = resolvePreferredBranch(normalizedBillingAddress);
-    } else if (normalizedAddress) {
-      // Try to extract location from address string
-      assignedBranch = resolvePreferredBranch({ street: normalizedAddress });
-    } else {
-      assignedBranch = "Bulacan"; // Default fallback
-    }
-  } else if (["admin", "technician", "superadmin"].includes(userRole)) {
-    // Require branch selection for staff roles
-    const selectedBranch = typeof branch === "string" ? branch.trim() : "";
-    if (!selectedBranch || !BRANCHES.includes(selectedBranch)) {
-      return res.status(400).json({ message: "A valid branch must be selected for this role." });
-    }
-    assignedBranch = selectedBranch;
-  }
-
-  if (userRole === "customer" && !isBillingAddressComplete(normalizedBillingAddress) && !normalizedAddress) {
-    console.warn("[Auth][Register] Missing customer billing address", { email: normalizedEmail, userRole });
-    return res.status(400).json({ message: "Billing address is required for customer accounts." });
-  }
-
-  const dupChecks = [{ email: normalizedEmail }, { phone: normalizedPhone }];
-  if (normalizedUsername) {
-    dupChecks.push({ username: normalizedUsername });
-  }
-  const existing = await User.findOne({ $or: dupChecks });
-  if (existing) {
-    const duplicateErrors = {};
-    if (existing.email === normalizedEmail) {
-      duplicateErrors.email = "Email already exists";
-    }
-    if (existing.phone === normalizedPhone) {
-      duplicateErrors.phone = "Phone number already exists";
-    }
-    if (normalizedUsername && existing.username === normalizedUsername) {
-      duplicateErrors.alias = "Alias already exists";
-    }
-    console.warn("[Auth][Register] Duplicate account", { email: normalizedEmail, phone: normalizedPhone, duplicateErrors });
-    return res.status(409).json({ message: "Duplicate registration details found", errors: duplicateErrors });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const defaultAddress = {
-    label: "Billing Address",
-    type: "home",
-    name: name || `${name_first} ${name_last}`.trim(),
-    phone: normalizedPhone,
-    region: normalizedBillingAddress.region,
-    province: normalizedBillingAddress.province,
-    city: normalizedBillingAddress.city,
-    barangay: normalizedBillingAddress.barangay,
-    street: normalizedBillingAddress.street,
-    postalCode: "",
-    isDefault: true,
-  };
-
-  const user = await User.create({
-    email: normalizedEmail,
-    username: normalizedUsername || undefined,
-    passwordHash,
-    name: name || `${name_first} ${name_last}`.trim(),
-    name_first,
-    name_last,
-    phone: normalizedPhone,
-    address: userRole === "customer" ? (composedBillingAddress || normalizedAddress) : "",
-    billingAddress: userRole === "customer" ? normalizedBillingAddress : {},
-    addresses: userRole === "customer" ? [defaultAddress] : [],
-    role: userRole,
-    assignedBranch,
-    activeBranch: assignedBranch, // Set active branch to assigned branch initially
-    location: normalizedLocation,
-  });
-
-  await OtpRequest.deleteMany({
-    action: { $in: ["register_email", "register_phone"] },
-    $or: [{ email: normalizedEmail }, { phone: normalizedPhone }],
-  });
-
-  const token = signAccessToken({ sub: user.id, role: user.role });
-  console.log("[Auth][Register] User created", {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    assignedBranch,
-    hasAddress: Boolean(user.address),
-  });
-
-  // Create audit log for user registration
-  await AuditLog.create({
-    action: "user_registered",
-    user: user.id,
-    branch: assignedBranch,
-    entityType: "user",
-    entityId: user.id,
-    description: `New ${userRole} account registered: ${user.email}`,
-    ipAddress: req.ip || req.connection.remoteAddress,
-  });
-
-  return res.status(201).json({ token, user: user.toJSON() });
 };
 
 const login = async (req, res) => {
-  const { identifier, email, password, branch } = req.body;
-  const loginValue = String(identifier || email || "").trim();
-  const normalizedLoginValue = normalizeIdentifier(loginValue);
-  const errors = {};
-
-  if (!loginValue) {
-    errors.email = "Email or alias is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginValue) && loginValue.length < 2) {
-    errors.email = "Email or alias must be valid";
-  }
-
-  if (!password) {
-    errors.password = "Password is required";
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return res.status(400).json({ errors });
-  }
-
-  const clientType = String(req.body?.clientType || "web").trim().toLowerCase();
-  console.log("[Auth][Login] Attempt", {
-    identifier: normalizedLoginValue || "(missing)",
-    clientType,
-    branch: typeof branch === "string" ? branch.trim() : "",
-  });
-
-  const user = await findUserByIdentifier(loginValue);
-  if (!user) {
-    console.warn("[Auth][Login] Failed", {
-      identifier: normalizedLoginValue,
-      reason: "not_found",
-      clientType,
+  const { identifier, password } = req.body;
+  try {
+    const normalizedIdentifier = normalizeIdentifier(identifier);
+    // STRICT ALIAS LOGIN: Email is excluded to prioritize technical identity
+    const user = await User.findOne({
+      $or: [
+        { phone: normalizePhone(identifier) },
+        { alias: normalizedIdentifier },
+        { username: normalizedIdentifier },
+      ],
     });
-    return res.status(401).json({ errors: { email: "Email or password is incorrect" } });
-  }
-  if (user.isDeleted || user.accountStatus === "deleted" || user.accountStatus === "disabled") {
-    return res.status(403).json({ message: "Account is not active." });
-  }
 
-  if (!user.passwordHash) {
-    return res.status(400).json({
-      message: "This account requires a password. Please reset your password if you've forgotten it.",
-    });
-  }
-
-
-  if (!user.role) {
-    user.role = detectRoleFromEmail(normalizedLoginValue);
-  }
-  if (user.isFirstLogin && ["admin", "technician"].includes(user.role)) {
-    return res.status(403).json({
-      message: "You must change your password before first login.",
-      requirePasswordChange: true,
-    });
-  }
-  if (user.role === "technician" && clientType !== "mobile") {
-    return res.status(403).json({ message: "Technician accounts cannot access the web platform. Please use the mobile app." });
-  }
-
-  if (user.lockoutUntil && user.lockoutUntil.getTime() > Date.now()) {
-    const secondsLeft = Math.max(1, Math.ceil((user.lockoutUntil.getTime() - Date.now()) / 1000));
-    console.warn("[Auth][Login] Locked", {
-      id: user.id,
-      role: user.role,
-      secondsLeft,
-      clientType,
-    });
-    return res.status(423).json({
-      message: `Account locked. Try again in ${secondsLeft} seconds.`,
-      secondsLeft,
-    });
-  }
-
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-    const lockSeconds = lockoutSecondsForAttemptCount(user.failedLoginAttempts);
-    if (lockSeconds > 0) {
-      user.lockoutUntil = new Date(Date.now() + lockSeconds * 1000);
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
-    await user.save();
-    if (lockSeconds > 0) {
-      console.warn("[Auth][Login] Failed", {
-        id: user.id,
-        role: user.role,
-        reason: "locked",
-        attempts: user.failedLoginAttempts,
-        clientType,
+    const token = signAccessToken({ sub: user.id, role: user.role });
+    return res.json({ success: true, token, user: user.toJSON() });
+  } catch (err) {
+    return res.status(500).json({ message: "Login error" });
+  }
+};
+
+const logout = async (req, res) => {
+  console.log("[BOUTIQUE] Nuclear session & database purge initiated...");
+  try {
+    const email =
+      req.session?.registrationProgress?.email ||
+      req.session?.tempRegistrationEmail;
+    if (email) {
+      const deleted = await OtpRequest.deleteMany({
+        email: normalizeEmail(email),
       });
-      return res.status(423).json({
-        message: `Account locked. Try again in ${lockSeconds} seconds.`,
-        secondsLeft: lockSeconds,
-        attempts: user.failedLoginAttempts,
+      console.log(
+        `[BOUTIQUE] Purged ${deleted.deletedCount} technical identifiers for ${email}.`,
+      );
+    }
+    if (req.session) {
+      req.session.destroy(() => {
+        res.clearCookie("aeropulse.sid");
+        return res.json({ success: true });
       });
+    } else {
+      res.json({ success: true });
     }
-    console.warn("[Auth][Login] Failed", {
-      id: user.id,
-      role: user.role,
-      reason: "invalid_password",
-      attempts: user.failedLoginAttempts,
-      clientType,
-    });
-    return res.status(401).json({ errors: { password: "Email or password is incorrect" } });
+  } catch (err) {
+    res.status(500).json({ message: "Reset failed." });
   }
+};
 
-  // Superadmin doesn't require a branch - they have access to all branches
-  const isBranchScopedRole = ["admin", "technician"].includes(user.role);
-  let selectedBranch = "";
-  let effectiveBranch = "";
-
-  if (isBranchScopedRole) {
-    selectedBranch = typeof branch === "string" ? branch.trim() : "";
-    effectiveBranch = BRANCHES.includes(selectedBranch)
-      ? selectedBranch
-      : (BRANCHES.includes(user.activeBranch) ? user.activeBranch : user.assignedBranch);
-  }
-
-  if (["admin", "technician"].includes(user.role)) {
-    if (!effectiveBranch || !BRANCHES.includes(effectiveBranch)) {
-      return res.status(400).json({ message: "A valid branch is required for this account." });
-    }
-
-    // Update activeBranch if different from selected
-    if (effectiveBranch !== user.activeBranch) {
-      user.activeBranch = effectiveBranch;
-    }
-  }
-
-  // Reset failed attempts and update last login on success
-  user.failedLoginAttempts = 0;
-  user.lockoutUntil = null;
-  user.lastLogin = new Date();
-  await user.save();
-
-  const token = signAccessToken({ sub: user.id, role: user.role });
-
-  console.log("[Auth][Login] Success", {
-    id: user.id,
-    role: user.role,
-    clientType,
-    branch: effectiveBranch,
-  });
-
-  // Create audit log for successful login
-  await AuditLog.create({
-    action: "user_login",
-    user: user.id,
-    branch: effectiveBranch || "",
-    entityType: "user",
-    entityId: user.id,
-    description: `${user.role} login from ${clientType}`,
-    ipAddress: req.ip || req.connection.remoteAddress,
-  });
-
+const getSession = async (req, res) => {
   return res.json({
-    success: true,
-    token,
-    user: user.toJSON(),
+    session: {
+      registrationProgress: req.session?.registrationProgress || null,
+      cart: req.session?.cart || [],
+    },
   });
 };
 
-const requestOtp = async (req, res) => {
-  const action = String(req.body?.action || "").trim();
-  const email = normalizeEmail(req.body?.email);
-  const phone = canonicalizePhMobile(req.body?.phone);
-  const channel = String(req.body?.channel || (action === "register_phone" ? "sms" : "email")).trim();
-
-  if (!action || !["register_email", "register_phone", "password_reset"].includes(action)) {
-    return res.status(400).json({ message: "Invalid OTP request action." });
-  }
-
-  if (action === "register_email" && !email) {
-    return res.status(400).json({ message: "Email is required to request registration OTP." });
-  }
-
-  if (action === "register_phone" && !phone) {
-    return res.status(400).json({ message: "Phone number is required to request registration OTP." });
-  }
-
-  if (action === "password_reset" && !email) {
-    return res.status(400).json({ message: "Email is required to request password reset OTP." });
-  }
-
-  if (action === "register_email") {
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({ message: "An account with this email already exists." });
-    }
-  }
-
-  if (action === "register_phone") {
-    const existingUser = await User.findOne({ phone });
-    if (existingUser) {
-      return res.status(409).json({ message: "An account with this mobile number already exists." });
-    }
-  }
-
-  if (action === "password_reset") {
-    const user = await User.findOne({ email });
-    if (!user || user.isDeleted || user.accountStatus !== "active") {
-      return res.json({ message: "If this email is registered, a reset code has been sent." });
-    }
-  }
-
-  await createOtpRequest({ email, phone, action, channel });
-  return res.json({ message: "One-time code sent.", action });
+const updateRegistrationProgress = async (req, res) => {
+  req.session.registrationProgress = req.body.progress;
+  return res.json({ success: true });
 };
 
-const verifyOtp = async (req, res) => {
-  const action = String(req.body?.action || "").trim();
-  const email = normalizeEmail(req.body?.email);
-  const phone = canonicalizePhMobile(req.body?.phone);
-  const code = String(req.body?.code || "").trim();
-  const branch = String(req.body?.branch || "").trim();
-  const newPassword = String(req.body?.new_password || "").trim();
-  const channel = action === "register_phone" ? "sms" : "email";
-
-  if (!action || !code) {
-    return res.status(400).json({ message: "Verification action and code are required." });
-  }
-
-  if (!isValidSixDigitCode(code)) {
-    return res.status(400).json({ message: "Invalid verification code format." });
-  }
-
-  const verification = await verifyOtpRequest({ email, phone, action, channel, code });
-  if (!verification.ok) {
-    if (verification.reason === "expired") {
-      return res.status(410).json({ message: "This code has expired." });
-    }
-    return res.status(400).json({ message: "Invalid verification code." });
-  }
-
-  if (action === "register_email" || action === "register_phone") {
-    return res.json({ message: "Verification successful." });
-  }
-
-  if (action === "login") {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "No account found for this email." });
-    }
-    if (user.isDeleted || user.accountStatus === "deleted" || user.accountStatus === "disabled") {
-      return res.status(403).json({ message: "Account is not active." });
-    }
-    if (user.role === "technician") {
-      return res.status(403).json({ message: "Technician accounts cannot access the web platform. Please use the mobile app." });
-    }
-    if (!user.passwordHash) {
-      return res.status(400).json({ message: "This account uses Google Sign-In. Please continue with Google." });
-    }
-
-    let effectiveBranch = branch || verification.otp.metadata?.branch || "";
-    if (user.role === "admin") {
-      effectiveBranch = BRANCHES.includes(effectiveBranch) ? effectiveBranch : user.assignedBranch;
-      if (!effectiveBranch || !BRANCHES.includes(effectiveBranch)) {
-        return res.status(400).json({ message: "A valid branch is required for this account." });
-      }
-      user.activeBranch = effectiveBranch;
-      if (!user.assignedBranch) {
-        user.assignedBranch = effectiveBranch;
-      }
-    } else if (user.role === "superadmin") {
-      user.activeBranch = "";
-    }
-
-    user.failedLoginAttempts = 0;
-    user.lockoutUntil = null;
-    user.lastLogin = new Date();
-    await user.save();
-
-    const token = signAccessToken({ sub: user.id, role: user.role });
-    return res.json({ token, user: user.toJSON() });
-  }
-
-  if (action === "password_reset") {
-    if (!newPassword) {
-      return res.status(400).json({ message: "New password is required." });
-    }
-    if (!isStrongPassword(newPassword)) {
-      return res.status(400).json({ message: "Password must be at least 8 characters and include uppercase, lowercase, number, and special character." });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "No account found for this email." });
-    }
-    if (user.isDeleted || user.accountStatus === "deleted" || user.accountStatus === "disabled") {
-      return res.status(403).json({ message: "Account is not active." });
-    }
-
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
-    user.authProvider = user.googleId ? "google" : "local";
-    user.failedLoginAttempts = 0;
-    user.lockoutUntil = null;
-    user.lastLogin = new Date();
-    await user.save();
-
-    const token = signAccessToken({ sub: user.id, role: user.role });
-    return res.json({ message: "Password reset successful.", token, user: user.toJSON() });
-  }
-
-  return res.status(400).json({ message: "Unsupported verification action." });
-};
-
-const logout = async (_req, res) => {
+const updateCart = async (req, res) => {
+  req.session.cart = req.body.cart;
   return res.json({ success: true });
 };
 
 const me = async (req, res) => {
-  return res.json({ user: req.authUser.toJSON() });
+  const user = await User.findById(req.user.sub);
+  if (!user) return res.status(404).json({ message: "User not found" });
+  res.json(user);
 };
 
 const requestPasswordReset = async (req, res) => {
-  const normalizedEmail = String(req.body?.email || "").trim().toLowerCase();
-  if (!normalizedEmail) {
-    return res.status(400).json({ message: "Email is required." });
-  }
-
-  if (!canSendEmail()) {
-    return res.status(500).json({ message: "Email service is not configured." });
-  }
-
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) {
-    return res.json({ message: "If this email is registered, a reset link has been sent." });
-  }
-  if (user.isDeleted || user.accountStatus === "deleted" || user.accountStatus === "disabled") {
-    return res.json({ message: "If this email is registered, a reset link has been sent." });
-  }
-
-  const { token, tokenHash } = generatePasswordResetToken();
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + PASSWORD_RESET_MINUTES * 60 * 1000);
-
-  user.passwordReset = {
-    tokenHash,
-    expiresAt,
-    usedAt: null,
-    requestedAt: now,
-  };
-  await user.save();
-
-  const encodedToken = encodeURIComponent(token);
-  const resetUrl = `${env.frontendUrl}/reset-password/${encodedToken}`;
-
-  await sendEmail({
-    to: user.email,
-    subject: "Reset your AeroPulse password",
-    text: [
-      "We received a request to reset your AeroPulse password.",
-      `Use this secure link to reset your password (valid for ${PASSWORD_RESET_MINUTES} minutes):`,
-      resetUrl,
-      "If you did not request this, you can ignore this email.",
-    ].join("\n\n"),
-    html: `
-      <p>We received a request to reset your AeroPulse password.</p>
-      <p>Use this secure link to reset your password (valid for ${PASSWORD_RESET_MINUTES} minutes):</p>
-      <p><a href="${resetUrl}">${resetUrl}</a></p>
-      <p>If you did not request this, you can ignore this email.</p>
-    `,
+  const email = normalizeEmail(req.body.email);
+  const user = await User.findOne({ email });
+  if (!user) return res.json({ message: "If email exists, code sent." });
+  const { code } = await createOtpRequest({
+    email,
+    action: "password_reset",
+    channel: "email",
   });
-
-  return res.json({ message: "Reset link sent. Please check your email." });
+  res.json({ message: "Code sent.", debugCode: code });
 };
 
 const resetPassword = async (req, res) => {
-  const token = decodeURIComponent(String(req.params?.token || "")).trim();
-  const newPassword = String(req.body?.password || "");
-
-  if (!token) {
-    return res.status(400).json({ message: "Reset token is required." });
+  const { token } = req.params;
+  const { password } = req.body;
+  try {
+    const decoded = jwt.verify(token, env.jwtSecret);
+    const user = await User.findById(decoded.sub);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(password, salt);
+    await user.save();
+    res.json({ message: "Success" });
+  } catch (err) {
+    res.status(400).json({ message: "Invalid token." });
   }
-  if (!isStrongPassword(newPassword)) {
-    return res.status(400).json({
-      message: "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.",
-    });
-  }
-
-  const parsed = parseAndVerifyPasswordResetToken(token);
-  if (!parsed.ok) {
-    return res.status(400).json({ message: "Invalid reset token." });
-  }
-
-  const user = await User.findOne({ "passwordReset.tokenHash": parsed.tokenHash });
-  if (!user) {
-    return res.status(400).json({ message: "Invalid reset token." });
-  }
-
-  if (user.passwordReset?.usedAt) {
-    return res.status(410).json({ message: "This reset link has already been used." });
-  }
-
-  if (!user.passwordReset?.expiresAt || user.passwordReset.expiresAt.getTime() < Date.now()) {
-    return res.status(410).json({ message: "This reset link has expired." });
-  }
-
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  user.authProvider = user.googleId ? "google" : "local";
-  user.failedLoginAttempts = 0;
-  user.lockoutUntil = null;
-  user.lastLogin = new Date();
-  user.passwordReset.usedAt = new Date();
-  user.passwordReset.tokenHash = "";
-  user.passwordReset.expiresAt = null;
-  await user.save();
-
-  const appToken = signAccessToken({ sub: user.id, role: user.role });
-  return res.json({
-    message: "Password reset successful.",
-    token: appToken,
-    user: user.toJSON(),
-  });
 };
 
 const resetPasswordWithCode = async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
-  const code = String(req.body?.code || "").trim();
-  const newPassword = String(req.body?.new_password || "").trim();
-
-  if (!email || !code || !newPassword) {
-    return res.status(400).json({ message: "Email, code and new password are required." });
-  }
-  if (!isValidSixDigitCode(code)) {
-    return res.status(400).json({ message: "Invalid verification code format." });
-  }
-  if (!isStrongPassword(newPassword)) {
-    return res.status(400).json({
-      message: "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.",
-    });
-  }
-
-  const verification = await verifyOtpRequest({ email, action: "password_reset", channel: "email", code });
-  if (!verification.ok) {
-    if (verification.reason === "expired") {
-      return res.status(410).json({ message: "This reset code has expired." });
-    }
-    return res.status(400).json({ message: "Invalid verification code." });
-  }
-
-  const user = await User.findOne({ email });
-  if (!user) {
-    return res.status(400).json({ message: "No account found for this email." });
-  }
-  if (user.isDeleted || user.accountStatus === "deleted" || user.accountStatus === "disabled") {
-    return res.status(403).json({ message: "Account is not active." });
-  }
-
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  user.authProvider = user.googleId ? "google" : "local";
-  user.failedLoginAttempts = 0;
-  user.lockoutUntil = null;
-  user.lastLogin = new Date();
-  await user.save();
-
-  const appToken = signAccessToken({ sub: user.id, role: user.role });
-  return res.json({
-    message: "Password reset successful.",
-    token: appToken,
-    user: user.toJSON(),
+  const { email, code, newPassword } = req.body;
+  const normalizedEmail = normalizeEmail(email);
+  const verification = await verifyOtpRequest({
+    email: normalizedEmail,
+    action: "password_reset",
+    channel: "email",
+    code,
   });
+  if (!verification.ok)
+    return res.status(400).json({ message: "Invalid code." });
+  const user = await User.findOne({ email: normalizedEmail });
+  const salt = await bcrypt.genSalt(10);
+  user.passwordHash = await bcrypt.hash(newPassword, salt);
+  await user.save();
+  res.json({ message: "Success" });
 };
 
 module.exports = {
+  startRegistration,
+  verifyRegistrationCode,
   register,
   login,
   logout,
@@ -959,5 +624,9 @@ module.exports = {
   resetPassword,
   requestOtp,
   verifyOtp,
+  checkAliasAvailability,
   resetPasswordWithCode,
+  getSession,
+  updateRegistrationProgress,
+  updateCart,
 };

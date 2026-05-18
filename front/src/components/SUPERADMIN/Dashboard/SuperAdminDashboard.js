@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useUser } from '../../../context/UserContext';
-import { apiRequest } from '../../../config/api';
-import SuperAdminLayout from '../Common/SuperAdminLayout';
-import icons from '../../common/icons';
-import '../superAdminShared.css';
-import './SuperAdminDashboard.css';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiRequest } from "../../../config/api";
+import { useUser } from "../../../context/UserContext";
+import SuperAdminLayout from "../Common/SuperAdminLayout";
+import "../superAdminShared.css";
+import "./SuperAdminDashboard.css";
+// import icons from '../../common/icons';
+const icons = {}; // BOUTIQUE MIGRATION STUB
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -13,9 +14,9 @@ function SuperAdminDashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '',
-    address: user?.address || ''
+    name: user?.name || "",
+    phone: user?.phone || "",
+    address: user?.address || "",
   });
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -24,17 +25,21 @@ function SuperAdminDashboard() {
     customers: 0,
     recentlyActiveUsers: 0,
     totalOrders: 0,
-    latestSalesBranch: '-'
+    latestSalesBranch: "-",
   });
 
   useEffect(() => {
-    Promise.all([
-      apiRequest('/dashboard/me'),
-      apiRequest('/orders')
-    ])
+    Promise.all([apiRequest("/dashboard/me"), apiRequest("/orders")])
       .then(([dashData, ordersData]) => {
-        const orders = Array.isArray(ordersData?.orders) ? ordersData.orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
-        const latestBranch = orders.length > 0 ? (orders[0]?.branch || orders[0]?.stockSourceBranch || '-') : '-';
+        const orders = Array.isArray(ordersData?.orders)
+          ? ordersData.orders.sort(
+              (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+            )
+          : [];
+        const latestBranch =
+          orders.length > 0
+            ? orders[0]?.branch || orders[0]?.stockSourceBranch || "-"
+            : "-";
         setStats({
           totalUsers: dashData?.stats?.totalUsers || 0,
           admins: dashData?.stats?.admins || 0,
@@ -42,19 +47,19 @@ function SuperAdminDashboard() {
           customers: dashData?.stats?.customers || 0,
           recentlyActiveUsers: dashData?.stats?.recentlyActiveUsers || 0,
           totalOrders: orders.length,
-          latestSalesBranch: latestBranch
+          latestSalesBranch: latestBranch,
         });
       })
       .catch((error) => {
-        console.error('Failed to load superadmin dashboard:', error);
+        console.error("Failed to load superadmin dashboard:", error);
       });
   }, []);
 
   const openEdit = () => {
     setForm({
-      name: user?.name || '',
-      phone: user?.phone || '',
-      address: user?.address || ''
+      name: user?.name || "",
+      phone: user?.phone || "",
+      address: user?.address || "",
     });
     setIsEditing(true);
   };
@@ -65,7 +70,7 @@ function SuperAdminDashboard() {
       setSaving(true);
       await updateProfile(form);
       setIsEditing(false);
-      alert('Super admin profile updated.');
+      alert("Super admin profile updated.");
     } catch (error) {
       alert(`Unable to update profile: ${error.message}`);
     } finally {
@@ -81,8 +86,10 @@ function SuperAdminDashboard() {
   ];
 
   return (
-    <SuperAdminLayout title="Super Admin Command Center" subtitle={`Welcome back, ${user?.name || 'Boss'}`}>
-      {/* Stats row */}
+    <SuperAdminLayout
+      title="Super Admin Command Center"
+      subtitle={`Welcome, ${user?.name || "Boss"}`}
+    >
       <div className="super-grid">
         <div className="super-card">
           <h3>Customer Accounts</h3>
@@ -107,48 +114,63 @@ function SuperAdminDashboard() {
         <div className="super-card">
           <h2>Boss Controls</h2>
           <div className="super-list">
-            <button type="button" onClick={() => navigate('/superadmin/branches')}>
-              <img src={icons.marker} alt="" className="inline-icon inline-icon--md" />
-              Branch Location Handling
+            <button
+              type="button"
+              onClick={() => navigate("/superadmin/branches")}
+            >
+              <img src={icons.marker} alt="" className="inline-icon" /> Branch
+              Location Handling
             </button>
-            <button type="button" onClick={() => navigate('/superadmin/sales')}>
-              <img src={icons.cartShoppingFast} alt="" className="inline-icon inline-icon--md" />
+            <button type="button" onClick={() => navigate("/superadmin/sales")}>
+              <img
+                src={icons.cartShoppingFast}
+                alt=""
+                className="inline-icon"
+              />{" "}
               Processing Sales
             </button>
-            <button type="button" onClick={() => navigate('/superadmin/inventory')}>
-              <img src={icons.boxOpen} alt="" className="inline-icon inline-icon--md" />
+            <button
+              type="button"
+              onClick={() => navigate("/superadmin/inventory")}
+            >
+              <img src={icons.boxOpen} alt="" className="inline-icon" />{" "}
               Inventory Checker
             </button>
-            <button type="button" onClick={() => navigate('/superadmin/tasks')}>
-              <img src={icons.tools} alt="" className="inline-icon inline-icon--md" />
+            <button type="button" onClick={() => navigate("/superadmin/tasks")}>
+              <img src={icons.tools} alt="" className="inline-icon" />{" "}
               Processing Tech Tasks
             </button>
-            <button type="button" onClick={() => navigate('/superadmin/alerts')}>
-              <img src={icons.diamondExclamation} alt="" className="inline-icon inline-icon--md" />
+            <button
+              type="button"
+              onClick={() => navigate("/superadmin/alerts")}
+            >
+              <img
+                src={icons.diamondExclamation}
+                alt=""
+                className="inline-icon"
+              />{" "}
               Customer Complaint Alerts
             </button>
           </div>
         </div>
 
         <div className="super-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-            <h2>Executive Notes</h2>
-            <button type="button" onClick={openEdit} style={{ fontSize: 12, padding: '7px 14px' }}>
-              Edit Profile
-            </button>
-          </div>
-
-          {/* Profile rows */}
-          <div style={{ display: 'grid', gap: 8 }}>
-            {profileRows.map(({ label, value }) => (
-              <div key={label} className="exec-profile-row">
-                <strong>{label}</strong>
-                <span style={{ color: 'var(--super-text-secondary)', fontSize: 13 }}>{value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Reminders */}
+          <h2>Executive Notes</h2>
+          <p>
+            <strong>Name:</strong> {user?.name || "Super Admin"}
+          </p>
+          <p>
+            <strong>Email:</strong> {user?.email || "superadmin@aeropulse.com"}
+          </p>
+          <p>
+            <strong>Phone:</strong> {user?.phone || "-"}
+          </p>
+          <p>
+            <strong>Address:</strong> {user?.address || "-"}
+          </p>
+          <button type="button" onClick={openEdit}>
+            Edit Profile
+          </button>
           <ul>
             <li>Current customer accounts: {stats.customers}</li>
             <li>Review escalation board every morning and before close.</li>
@@ -161,35 +183,40 @@ function SuperAdminDashboard() {
       {/* Edit Profile Modal */}
       {isEditing && (
         <div className="app-modal-overlay" onClick={() => setIsEditing(false)}>
-          <form className="app-modal-card" onSubmit={onSave} onClick={(event) => event.stopPropagation()}>
+          <form
+            className="app-modal-card"
+            onSubmit={onSave}
+            onClick={(event) => event.stopPropagation()}
+          >
             <h3>Edit Super Admin Profile</h3>
-            <label style={{ display: 'grid', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--super-text)' }}>
-              Name
-              <input
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Full name"
-              />
-            </label>
-            <label style={{ display: 'grid', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--super-text)' }}>
-              Phone
-              <input
-                value={form.phone}
-                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                placeholder="+63 9XX XXX XXXX"
-              />
-            </label>
-            <label style={{ display: 'grid', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--super-text)' }}>
-              Address
-              <input
-                value={form.address}
-                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-                placeholder="Office / home address"
-              />
-            </label>
+            <input
+              value={form.name}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, name: e.target.value }))
+              }
+              placeholder="Name"
+            />
+            <input
+              value={form.phone}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, phone: e.target.value }))
+              }
+              placeholder="Phone"
+            />
+            <input
+              value={form.address}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, address: e.target.value }))
+              }
+              placeholder="Address"
+            />
             <div className="app-modal-actions">
-              <button type="button" onClick={() => setIsEditing(false)}>Cancel</button>
-              <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+              <button type="button" onClick={() => setIsEditing(false)}>
+                Cancel
+              </button>
+              <button type="submit" disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </form>
         </div>

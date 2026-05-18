@@ -1,343 +1,392 @@
-import { useState } from 'react';
-import InputField from '../common/InputField';
-import icons from '../common/icons';
-import { getRegions, getProvincesByRegion, getCitiesByProvince, getBarangaysByCity } from '../../domain/location/addressSelectors';
+import {
+  ArrowLeft,
+  ArrowRight,
+  MapPin,
+  NavigationArrow,
+  Plus,
+  Spinner,
+  Trash,
+  WarningDiamond,
+} from "@phosphor-icons/react";
+import { useState } from "react";
+import {
+  getBarangaysByCity,
+  getCitiesByProvince,
+  getProvincesByRegion,
+  getRegions,
+} from "../../domain/location/addressSelectors";
+import BoutiqueButton from "../common/boutique/BoutiqueButton";
+import BoutiqueInput from "../common/boutique/BoutiqueInput";
+import {
+  BQ_COLORS,
+  BQ_FONTS,
+  BQ_SHADOWS,
+} from "../common/boutique/BoutiqueTheme";
 
-function RegisterLocationStep({ formData, errors, onFieldChange, onNext, onBack, loading = false }) {
-  const [isCapturingLocation, setIsCapturingLocation] = useState(false);
-  const [locationError, setLocationError] = useState('');
-  const [locationSuccess, setLocationSuccess] = useState('');
+const INITIAL_ADDRESS = {
+  region: "",
+  province: "",
+  city: "",
+  barangay: "",
+  street: "",
+};
+
+const INITIAL_LOCATION = {
+  coordinates: {
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    timestamp: null,
+  },
+  address: { ...INITIAL_ADDRESS },
+  source: "manual",
+};
+
+export default function RegisterLocationStep({
+  formData,
+  onFieldChange,
+  onNext,
+  onBack,
+  loading = false,
+}) {
+  // Defensive guard for locations array
+  const locations = formData.locations || [];
+
+  const [showAddForm, setShowAddForm] = useState(locations.length === 0);
+  const [currentLoc, setCurrentLoc] = useState({ ...INITIAL_LOCATION });
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [error, setError] = useState("");
 
   const regions = getRegions();
-  const provinces = getProvincesByRegion(formData.location?.address?.region || '');
-  const cities = getCitiesByProvince(formData.location?.address?.region || '', formData.location?.address?.province || '');
-  const barangays = getBarangaysByCity(formData.location?.address?.region || '', formData.location?.address?.province || '', formData.location?.address?.city || '');
+  const provinces = getProvincesByRegion(currentLoc.address.region);
+  const cities = getCitiesByProvince(
+    currentLoc.address.region,
+    currentLoc.address.province,
+  );
+  const barangays = getBarangaysByCity(
+    currentLoc.address.region,
+    currentLoc.address.province,
+    currentLoc.address.city,
+  );
 
-  const updateLocationField = (field, value) => {
-    const updatedLocation = {
-      ...formData.location,
-      address: {
-        ...formData.location.address,
-        [field]: value,
-      },
+  const updateField = (field, value) => {
+    const updated = {
+      ...currentLoc,
+      address: { ...currentLoc.address, [field]: value },
     };
-
-    // Cascade clearing for dependent fields
-    if (field === 'region') {
-      updatedLocation.address.province = '';
-      updatedLocation.address.city = '';
-      updatedLocation.address.barangay = '';
-    } else if (field === 'province') {
-      updatedLocation.address.city = '';
-      updatedLocation.address.barangay = '';
-    } else if (field === 'city') {
-      updatedLocation.address.barangay = '';
+    if (field === "region") {
+      updated.address.province = "";
+      updated.address.city = "";
+      updated.address.barangay = "";
+    } else if (field === "province") {
+      updated.address.city = "";
+      updated.address.barangay = "";
+    } else if (field === "city") {
+      updated.address.barangay = "";
     }
-
-    onFieldChange('location', updatedLocation);
+    setCurrentLoc(updated);
   };
 
-  const updateCoordinates = (coordinates) => {
-    const updatedLocation = {
-      ...formData.location,
-      coordinates: {
-        ...formData.location.coordinates,
-        ...coordinates,
-        timestamp: new Date().toISOString(),
-      },
-      source: 'gps',
-    };
-    onFieldChange('location', updatedLocation);
-  };
-
-  const captureLocation = () => {
-    setIsCapturingLocation(true);
-    setLocationError('');
-    setLocationSuccess('');
+  const captureGps = () => {
+    setIsCapturing(true);
+    setError("");
 
     if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by this browser.');
-      setIsCapturingLocation(false);
+      setError("Geolocation not supported.");
+      setIsCapturing(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        updateCoordinates({
-          latitude,
-          longitude,
-          accuracy,
-        });
-        setLocationSuccess(`Location captured: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        setIsCapturingLocation(false);
-      },
-      (error) => {
-        let errorMessage = 'Unable to retrieve your location.';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please enable location permissions and try again.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information is unavailable.';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out.';
-            break;
-          default:
-            errorMessage = 'Unable to retrieve your location.';
-            break;
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        try {
+          const apiKey =
+            process.env.REACT_APP_LOCATIONIQ_KEY || "pk.YOUR_LOCATION_IQ_KEY";
+          const res = await fetch(
+            `https://us1.locationiq.com/v1/reverse?key=${apiKey}&lat=${latitude}&lon=${longitude}&format=json`,
+          );
+
+          if (res.ok) {
+            const data = await res.json();
+            const addr = data.address || {};
+            setCurrentLoc({
+              coordinates: {
+                latitude,
+                longitude,
+                accuracy,
+                timestamp: new Date().toISOString(),
+              },
+              address: {
+                region: addr.region || addr.state || "",
+                province: addr.province || addr.county || "",
+                city:
+                  addr.city ||
+                  addr.municipality ||
+                  addr.town ||
+                  addr.village ||
+                  "",
+                barangay: addr.suburb || addr.neighbourhood || "",
+                street: [addr.road, addr.house_number]
+                  .filter(Boolean)
+                  .join(" "),
+              },
+              source: "gps",
+            });
+          }
+        } catch (err) {
+          setCurrentLoc((prev) => ({
+            ...prev,
+            coordinates: {
+              latitude,
+              longitude,
+              accuracy,
+              timestamp: new Date().toISOString(),
+            },
+            source: "gps",
+          }));
         }
-        setLocationError(errorMessage);
-        setIsCapturingLocation(false);
+        setIsCapturing(false);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000, // 5 minutes
-      }
+      () => {
+        setError("Permission denied.");
+        setIsCapturing(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
-  const clearLocation = () => {
-    const clearedLocation = {
-      coordinates: {
-        latitude: null,
-        longitude: null,
-        accuracy: null,
-        timestamp: null,
-      },
-      address: {
-        region: '',
-        province: '',
-        city: '',
-        barangay: '',
-        street: '',
-        postalCode: '',
-      },
-      source: 'manual',
-    };
-    onFieldChange('location', clearedLocation);
-    setLocationError('');
-    setLocationSuccess('');
-  };
-
-  const hasCoordinates = formData.location?.coordinates?.latitude && formData.location?.coordinates?.longitude;
-  const hasAddress = formData.location?.address?.region && formData.location?.address?.province && formData.location?.address?.city;
-
-  const handleNext = () => {
-    // Location is optional, so we can proceed even without it
-    onNext();
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (loading) {
+  const addLocation = () => {
+    if (!currentLoc.address.city || !currentLoc.address.street) {
+      setError("City and Street Address are required.");
       return;
     }
-    handleNext();
+    const updated = [...locations, { ...currentLoc }];
+    onFieldChange("locations", updated);
+    setCurrentLoc({ ...INITIAL_LOCATION });
+    setShowAddForm(false);
+    setError("");
+  };
+
+  const removeLocation = (index) => {
+    const updated = locations.filter((_, i) => i !== index);
+    onFieldChange("locations", updated);
+    if (updated.length === 0) setShowAddForm(true);
   };
 
   return (
-    <form className="register-step" onSubmit={handleSubmit}>
-      <h3 className="register-step-title">Location</h3>
-      <p className="register-step-desc">Help us provide better service by sharing your location (optional)</p>
+    <div className="bq-location-flow bq-fade-in">
+      <div className="bq-flow-header">
+        <h3 className="bq-flow-title">Facility Hub</h3>
+        <p className="bq-flow-desc">
+          Register one or more locations for optimized service logistics.
+        </p>
+      </div>
 
-      {/* GPS Location Capture */}
-      <div className="location-capture-section">
-        <div className="location-capture-header">
-          <h4>GPS Location</h4>
-          <p>Capture your current location for better service</p>
-        </div>
+      {/* LIST OF ADDED LOCATIONS */}
+      {locations.length > 0 && (
+        <div className="bq-loc-list">
+          {locations.map((loc, i) => (
+            <div key={i} className="bq-loc-item bq-slide-down">
+              <div className="bq-loc-item-info">
+                <MapPin size={20} weight="fill" color={BQ_COLORS.accent} />
+                <div className="bq-loc-item-text">
+                  <span className="bq-loc-item-city">
+                    {loc.address.city}, {loc.address.barangay}
+                  </span>
+                  <span className="bq-loc-item-street">
+                    {loc.address.street}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="bq-loc-item-remove"
+                onClick={() => removeLocation(i)}
+              >
+                <Trash size={18} weight="bold" />
+              </button>
+            </div>
+          ))}
 
-        <div className="location-capture-controls">
-          <button
-            type="button"
-            className={`location-capture-btn ${isCapturingLocation ? 'capturing' : ''}`}
-            onClick={captureLocation}
-            disabled={isCapturingLocation}
-          >
-            {isCapturingLocation ? (
-              <>
-                <div className="spinner"></div>
-                Capturing...
-              </>
-            ) : (
-              <>
-                {icons.marker}
-                Capture Location
-              </>
-            )}
-          </button>
-
-          {hasCoordinates && (
+          {!showAddForm && (
             <button
               type="button"
-              className="location-clear-btn"
-              onClick={clearLocation}
+              className="bq-add-another-btn"
+              onClick={() => setShowAddForm(true)}
             >
-              Clear Location
+              <Plus size={16} weight="bold" /> Add Another Facility
             </button>
           )}
         </div>
+      )}
 
-        {locationError && (
-          <div className="location-message error">
-            {icons.diamondExclamation}
-            {locationError}
-          </div>
-        )}
-
-        {locationSuccess && (
-          <div className="location-message success">
-            {icons.checkCircle}
-            {locationSuccess}
-          </div>
-        )}
-
-        {hasCoordinates && (
-          <div className="location-coordinates">
-            <div className="coordinate-item">
-              <label>Latitude:</label>
-              <span>{formData.location.coordinates.latitude.toFixed(6)}</span>
+      {/* ADD FORM */}
+      {showAddForm && (
+        <div className="bq-loc-add-form bq-fade-in">
+          <div className="bq-gps-hub">
+            <div className="bq-hub-content">
+              <div className="bq-hub-text">
+                <span className="bq-hub-label">Technical Assist</span>
+                <h4 className="bq-hub-value">GPS Auto-Capture</h4>
+              </div>
+              <BoutiqueButton
+                type="button"
+                variant={currentLoc.source === "gps" ? "outline" : "primary"}
+                size="sm"
+                onClick={captureGps}
+                disabled={isCapturing}
+              >
+                {isCapturing ? (
+                  <Spinner className="bq-spin" size={16} />
+                ) : (
+                  <NavigationArrow size={16} weight="bold" />
+                )}
+                {isCapturing ? "Acquiring..." : "Sync Position"}
+              </BoutiqueButton>
             </div>
-            <div className="coordinate-item">
-              <label>Longitude:</label>
-              <span>{formData.location.coordinates.longitude.toFixed(6)}</span>
-            </div>
-            {formData.location.coordinates.accuracy && (
-              <div className="coordinate-item">
-                <label>Accuracy:</label>
-                <span>±{Math.round(formData.location.coordinates.accuracy)}m</span>
+            {error && (
+              <div className="bq-hub-error">
+                <WarningDiamond size={14} weight="bold" /> {error}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Manual Address Input */}
-      <div className="location-address-section">
-        <div className="location-address-header">
-          <h4>Address Information</h4>
-          <p>Provide your address details (optional)</p>
-        </div>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label>Region</label>
-            <select
-              value={formData.location?.address?.region || ''}
-              onChange={(e) => updateLocationField('region', e.target.value)}
-            >
-              <option value="">Select Region</option>
-              {regions.map((region) => (
-                <option key={region} value={region}>{region}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Province</label>
-            <select
-              value={formData.location?.address?.province || ''}
-              onChange={(e) => updateLocationField('province', e.target.value)}
-              disabled={!formData.location?.address?.region}
-            >
-              <option value="">Select Province</option>
-              {provinces.map((province) => (
-                <option key={province} value={province}>{province}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label>City / Municipality</label>
-            <select
-              value={formData.location?.address?.city || ''}
-              onChange={(e) => updateLocationField('city', e.target.value)}
-              disabled={!formData.location?.address?.province}
-            >
-              <option value="">Select City / Municipality</option>
-              {cities.map((city) => (
-                <option key={city} value={city}>{city}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Barangay</label>
-            <select
-              value={formData.location?.address?.barangay || ''}
-              onChange={(e) => updateLocationField('barangay', e.target.value)}
-              disabled={!formData.location?.address?.city}
-            >
-              <option value="">Select Barangay</option>
-              {barangays.map((barangay) => (
-                <option key={barangay} value={barangay}>{barangay}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <InputField
-          label="Street Address"
-          type="text"
-          placeholder="House/Block/Lot No., Street Name"
-          value={formData.location?.address?.street || ''}
-          onChange={(value) => updateLocationField('street', value)}
-        />
-
-        <div className="form-row">
-          <div className="form-group">
-            <label>Postal Code</label>
-            <input
-              type="text"
-              placeholder="Postal code"
-              value={formData.location?.address?.postalCode || ''}
-              onChange={(e) => updateLocationField('postalCode', e.target.value.replace(/\D/g, '').slice(0, 4))}
-              maxLength={4}
-              inputMode="numeric"
+          <div className="bq-address-grid">
+            <BoutiqueInput
+              label="Region"
+              type="select"
+              value={currentLoc.address.region}
+              onChange={(e) => updateField("region", e.target.value)}
+              options={regions.map((r) => ({ value: r, label: r }))}
+              placeholder="Select Region"
             />
+            <BoutiqueInput
+              label="Province"
+              type="select"
+              value={currentLoc.address.province}
+              onChange={(e) => updateField("province", e.target.value)}
+              disabled={!currentLoc.address.region}
+              options={provinces.map((p) => ({ value: p, label: p }))}
+              placeholder="Select Province"
+            />
+            <BoutiqueInput
+              label="City"
+              type="select"
+              value={currentLoc.address.city}
+              onChange={(e) => updateField("city", e.target.value)}
+              disabled={!currentLoc.address.province}
+              options={cities.map((c) => ({ value: c, label: c }))}
+              placeholder="Select City"
+            />
+            <BoutiqueInput
+              label="Barangay"
+              type="select"
+              value={currentLoc.address.barangay}
+              onChange={(e) => updateField("barangay", e.target.value)}
+              disabled={!currentLoc.address.city}
+              options={barangays.map((b) => ({ value: b, label: b }))}
+              placeholder="Select Barangay"
+            />
+            <div className="bq-grid-full">
+              <BoutiqueInput
+                label="Street Address"
+                placeholder="House No., Building, Street"
+                value={currentLoc.address.street}
+                onChange={(e) => updateField("street", e.target.value)}
+              />
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Location Summary */}
-      {(hasCoordinates || hasAddress) && (
-        <div className="location-summary">
-          <h4>Location Summary</h4>
-          <div className="location-summary-content">
-            {hasCoordinates && (
-              <div className="summary-item">
-                <strong>GPS:</strong> {formData.location.coordinates.latitude.toFixed(4)}, {formData.location.coordinates.longitude.toFixed(4)}
-              </div>
-            )}
-            {hasAddress && (
-              <div className="summary-item">
-                <strong>Address:</strong> {[
-                  formData.location.address.street,
-                  formData.location.address.barangay,
-                  formData.location.address.city,
-                  formData.location.address.province,
-                  formData.location.address.region,
-                ].filter(Boolean).join(', ')}
-              </div>
-            )}
+          <div className="bq-add-form-actions">
+            <BoutiqueButton
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddForm(false)}
+              disabled={locations.length === 0}
+            >
+              Cancel
+            </BoutiqueButton>
+            <BoutiqueButton type="button" size="sm" onClick={addLocation}>
+              Save Facility
+            </BoutiqueButton>
           </div>
         </div>
       )}
 
-      {/* Navigation */}
-      <div className="register-step-navigation">
-        <button type="button" className="back-btn" onClick={onBack} disabled={loading}>
-          Back
-        </button>
-        <button type="submit" className="next-btn" disabled={loading}>
-          {loading ? 'Registering…' : 'Complete Registration'}
-        </button>
+      <div className="bq-flow-actions">
+        <BoutiqueButton
+          type="button"
+          variant="ghost"
+          size="md"
+          onClick={onBack}
+          disabled={loading}
+          style={{ flex: 1 }}
+        >
+          <ArrowLeft size={18} weight="bold" /> Back
+        </BoutiqueButton>
+
+        <BoutiqueButton
+          type="button"
+          size="md"
+          onClick={onNext}
+          loading={loading}
+          style={{ flex: 2 }}
+        >
+          {locations.length === 0 ? "Skip for now" : "Complete Setup"}{" "}
+          <ArrowRight size={18} weight="bold" />
+        </BoutiqueButton>
       </div>
-    </form>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .bq-location-flow { display: flex; flex-direction: column; gap: 40px; width: 100%; }
+        .bq-flow-header { margin-bottom: 8px; }
+        .bq-flow-title { font-family: ${BQ_FONTS.heading}; font-size: 32px; font-weight: 800; color: ${BQ_COLORS.ink}; margin: 0; letter-spacing: -0.02em; }
+        .bq-flow-desc { font-size: 16px; color: ${BQ_COLORS.inkMuted}; margin-top: 8px; font-weight: 500; opacity: 0.8; }
+
+        .bq-loc-list { display: flex; flex-direction: column; gap: 12px; }
+        .bq-loc-item {
+            background: white; border: 1px solid ${BQ_COLORS.border}; border-radius: 20px;
+            padding: 16px 24px; display: flex; align-items: center; justify-content: space-between;
+            box-shadow: ${BQ_SHADOWS.soft};
+        }
+        .bq-loc-item-info { display: flex; align-items: center; gap: 16px; }
+        .bq-loc-item-text { display: flex; flex-direction: column; }
+        .bq-loc-item-city { font-weight: 700; font-size: 14px; color: ${BQ_COLORS.ink}; }
+        .bq-loc-item-street { font-size: 12px; color: ${BQ_COLORS.inkMuted}; }
+        .bq-loc-item-remove { background: none; border: none; color: ${BQ_COLORS.danger}; cursor: pointer; opacity: 0.4; transition: opacity 0.2s; }
+        .bq-loc-item-remove:hover { opacity: 1; }
+
+        .bq-add-another-btn {
+            background: ${BQ_COLORS.bg}; border: 1px dashed ${BQ_COLORS.border}; border-radius: 20px;
+            padding: 16px; color: ${BQ_COLORS.inkMuted}; font-family: ${BQ_FONTS.heading};
+            font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; gap: 8px; transition: all 0.3s;
+        }
+        .bq-add-another-btn:hover { border-color: ${BQ_COLORS.accent}; color: ${BQ_COLORS.accent}; background: white; }
+
+        .bq-loc-add-form { display: flex; flex-direction: column; gap: 24px; padding: 32px; background: ${BQ_COLORS.bgAlt}; border-radius: 28px; border: 1.5px solid ${BQ_COLORS.border}; }
+        .bq-gps-hub { background: white; border: 1px solid ${BQ_COLORS.border}; border-radius: 16px; padding: 20px; box-shadow: ${BQ_SHADOWS.soft}; }
+        .bq-hub-content { display: flex; align-items: center; justify-content: space-between; }
+        .bq-hub-label { font-size: 9px; font-weight: 800; color: ${BQ_COLORS.accent}; text-transform: uppercase; letter-spacing: 0.1em; }
+        .bq-hub-value { font-size: 16px; font-weight: 700; margin: 4px 0 0; }
+        .bq-hub-error { margin-top: 12px; font-size: 12px; color: ${BQ_COLORS.danger}; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+
+        .bq-address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .bq-grid-full { grid-column: span 2; }
+        .bq-add-form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+
+        .bq-flow-actions { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 32px; border-top: 1px solid ${BQ_COLORS.border}; }
+
+        .bq-spin { animation: bq-spin 1s linear infinite; }
+        @keyframes bq-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes bq-slide-down { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+      `,
+        }}
+      />
+    </div>
   );
 }
-
-export default RegisterLocationStep;

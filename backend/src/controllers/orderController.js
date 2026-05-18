@@ -5,12 +5,11 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 const InventoryTransaction = require("../models/InventoryTransaction");
 const mongoose = require("mongoose");
-const { getBranchSearchOrder, resolvePreferredBranch } = require("../domain/branchRouting");
-const { createNotification, notifyUsersByRoles } = require("../domain/notificationHelper");
+const { canSendEmail, sendEmail } = require("../utils/email");
 const {
-  allocateProductStock,
-  logOrderDeductionTransactions,
-} = require("../services/inventorySyncService");
+  getBranchSearchOrder,
+  resolvePreferredBranch,
+} = require("../domain/branchRouting");
 
 const workflowLabel = (status) => {
   switch (status) {
@@ -43,7 +42,8 @@ const normalizeAddress = (address = {}) => ({
 });
 
 const isValidAddress = (address = {}) => {
-  if (!address.name || !address.phone || !address.street || !address.city) return false;
+  if (!address.name || !address.phone || !address.street || !address.city)
+    return false;
   const phoneDigits = address.phone.replace(/\D/g, "");
   if (!/^09\d{9}$/.test(phoneDigits)) return false;
   if (address.postalCode && !/^\d{4}$/.test(address.postalCode)) return false;
@@ -155,8 +155,19 @@ class HttpError extends Error {
 const createOrderNotification = async ({ customerId, title, message, actionUrl = "/my-orders", entityId = "" }) => {
   if (!customerId || !title || !message) return;
   try {
-    await createNotification({
-      userId: customerId,
+    const user = await User.findById(customerId).select("notifications");
+    const notifications =
+      user?.notifications?.toObject?.() || user?.notifications || {};
+    if (
+      notifications.inApp === false ||
+      notifications.push === false ||
+      notifications.orderUpdates === false
+    ) {
+      return;
+    }
+
+    await Notification.create({
+      user: customerId,
       type: "order",
       title,
       message,
@@ -184,7 +195,8 @@ const notifyBranchTechnicians = async (branch, orderCode) => {
 
     const validNotifications = technicians
       .filter((tech) => {
-        const notifications = tech?.notifications?.toObject?.() || tech?.notifications || {};
+        const notifications =
+          tech?.notifications?.toObject?.() || tech?.notifications || {};
         return notifications.inApp !== false && notifications.push !== false;
       })
       .map((tech) => ({
@@ -210,7 +222,11 @@ const createTaskForOrder = async (order) => {
   if (existingTask) return existingTask;
 
   const branch = order.stockSourceBranch || "";
-  const addressText = [order.address.street, order.address.city, order.address.postalCode]
+  const addressText = [
+    order.address.street,
+    order.address.city,
+    order.address.postalCode,
+  ]
     .filter(Boolean)
     .join(", ");
 
@@ -229,7 +245,8 @@ const createTaskForOrder = async (order) => {
     description: `Deliver and install items for order ${order.orderCode}.`,
     status: "pending",
     priority: "medium",
-    scheduledDate: order.estimatedDelivery || new Date().toISOString().split("T")[0],
+    scheduledDate:
+      order.estimatedDelivery || new Date().toISOString().split("T")[0],
     timeSlot: "TBD",
     assignedRole: "technician",
     branch,
@@ -249,10 +266,20 @@ const createTaskForOrder = async (order) => {
 
 const createOrder = async (req, res) => {
   const user = req.authUser;
-  const { items = [], address = {}, addressId = "", paymentMethod = "cod", total = 0 } = req.body;
-  const savedAddresses = Array.isArray(user.addresses) ? user.addresses.map((item) => normalizeAddress(item)) : [];
+  const {
+    items = [],
+    address = {},
+    addressId = "",
+    paymentMethod = "cod",
+    total = 0,
+    mockPaymentSuccess = false,
+  } = req.body;
+  const savedAddresses = Array.isArray(user.addresses)
+    ? user.addresses.map((item) => normalizeAddress(item))
+    : [];
   const fallbackLegacyAddress = normalizeAddress({
-    name: user.name || `${user.name_first || ""} ${user.name_last || ""}`.trim(),
+    name:
+      user.name || `${user.name_first || ""} ${user.name_last || ""}`.trim(),
     phone: user.phone || "",
     street: user.address || "",
     city: "",
@@ -260,9 +287,13 @@ const createOrder = async (req, res) => {
   });
 
   const normalizedAddress = (() => {
-    const requestedId = String(addressId || address.id || address._id || "").trim();
+    const requestedId = String(
+      addressId || address.id || address._id || "",
+    ).trim();
     if (requestedId) {
-      const matchedById = savedAddresses.find((item) => String(item._id || "") === requestedId);
+      const matchedById = savedAddresses.find(
+        (item) => String(item._id || "") === requestedId,
+      );
       if (matchedById) return matchedById;
     }
 
@@ -273,7 +304,7 @@ const createOrder = async (req, res) => {
           item.street === byPayload.street &&
           item.city === byPayload.city &&
           item.phone === byPayload.phone &&
-          item.name === byPayload.name
+          item.name === byPayload.name,
       );
       if (matchedByFields) return matchedByFields;
       const defaultAddress = savedAddresses.find((item) => item.isDefault);
@@ -287,7 +318,9 @@ const createOrder = async (req, res) => {
     return res.status(400).json({ message: "Order items are required." });
   }
   if (savedAddresses.length === 0) {
-    return res.status(400).json({ message: "No delivery address found. Please add an address to proceed." });
+    return res.status(400).json({
+      message: "No delivery address found. Please add an address to proceed.",
+    });
   }
   if (!isValidAddress(normalizedAddress)) {
     return res.status(400).json({ message: "Invalid delivery address." });
@@ -308,7 +341,9 @@ const createOrder = async (req, res) => {
 
   const preferredBranch = resolvePreferredBranch(normalizedAddress);
   const branchSearchOrder = getBranchSearchOrder(preferredBranch);
-  const assignedTechnician = preferredBranch ? `${preferredBranch} Technician Team` : "";
+  const assignedTechnician = preferredBranch
+    ? `${preferredBranch} Technician Team`
+    : "";
 
   const attemptCreateOrder = async () => {
     const session = await mongoose.startSession();
@@ -328,8 +363,48 @@ const createOrder = async (req, res) => {
 
           const product = await resolveProductForOrderItem(item, session);
           if (!product) {
-            throw new HttpError(404, `Product not found: ${item.name || item.id || item.model}`);
+            throw new HttpError(
+              404,
+              `Product not found: ${item.name || item.id || item.model}`,
+            );
           }
+
+          const selectedBranch = branchSearchOrder.find((branch) => {
+            return (
+              Number(product.branchStock?.get(branch) || 0) >= quantityNeeded
+            );
+          });
+
+          const hasBranchSnapshot = branchSearchOrder.some(
+            (branch) => Number(product.branchStock?.get(branch) || 0) > 0,
+          );
+          const fallbackBranch =
+            !hasBranchSnapshot && Number(product.stock || 0) >= quantityNeeded
+              ? preferredBranch
+              : null;
+          const finalBranch = selectedBranch || fallbackBranch;
+
+          if (!finalBranch) {
+            throw new HttpError(
+              409,
+              `Insufficient branch stock for ${product.name}. Tried preferred and nearby branches.`,
+            );
+          }
+
+          lastSourceBranch = finalBranch;
+
+          const currentBranchStock = Number(
+            product.branchStock?.get(finalBranch) || 0,
+          );
+          const remainingBranchStock = hasBranchSnapshot
+            ? Math.max(0, currentBranchStock - quantityNeeded)
+            : Math.max(0, Number(product.stock || 0) - quantityNeeded);
+          product.branchStock.set(finalBranch, remainingBranchStock);
+          product.stock = Array.from(product.branchStock.values()).reduce(
+            (sum, val) => sum + Number(val || 0),
+            0,
+          );
+          mutableProducts.push(product);
 
           resolvedItems.push({
             product,
@@ -369,9 +444,13 @@ const createOrder = async (req, res) => {
           item.sourceBranch = allocations[0]?.branch || preferredBranch;
         }
 
-        await Promise.all(mutableProducts.map((product) => product.save({ session })));
+        await Promise.all(
+          mutableProducts.map((product) => product.save({ session })),
+        );
 
-        const itemsSummary = resolvedItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
+        const itemsSummary = resolvedItems
+          .map((item) => `${item.name} x${item.quantity}`)
+          .join(", ");
 
         const stockSourceBranch = lastSourceBranch || preferredBranch;
 
@@ -380,7 +459,8 @@ const createOrder = async (req, res) => {
             {
               orderCode,
               customer: user._id,
-              customerName: user.name || `${user.name_first} ${user.name_last}`.trim(),
+              customerName:
+                user.name || `${user.name_first} ${user.name_last}`.trim(),
               items: resolvedItems,
               address: normalizedAddress,
               paymentMethod,
@@ -398,12 +478,12 @@ const createOrder = async (req, res) => {
                 amountPaid: orderTotal,
                 itemsSummary,
               },
-              totalAmount: orderTotal,
-              workflowStatus: "to_pay",
-              status: "pending",
+              totalAmount: total,
+              workflowStatus: mockPaymentSuccess ? "to_deliver" : "to_pay",
+              status: mockPaymentSuccess ? "paid" : "pending",
             },
           ],
-          { session }
+          { session },
         );
 
         const createdOrderDoc = Array.isArray(createdOrder) ? createdOrder[0] : createdOrder;
@@ -428,7 +508,10 @@ const createOrder = async (req, res) => {
 
   const isRetryableTransactionError = (error) => {
     const message = String(error?.message || "");
-    return message.includes("WriteConflict") || message.includes("TransientTransactionError");
+    return (
+      message.includes("WriteConflict") ||
+      message.includes("TransientTransactionError")
+    );
   };
 
   try {
@@ -436,35 +519,31 @@ const createOrder = async (req, res) => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const order = await attemptCreateOrder();
-        const orderPayload = {
-          ...order.toJSON(),
-          workflowLabel: workflowLabel(order.workflowStatus),
-        };
+        await createOrderNotification({
+          customerId: user._id,
+          title: "Order received",
+          message: `Your order ${order.orderCode} has been received and is now pending approval. You can track its status in My Orders.`,
+        });
 
-        if (!order.duplicate) {
-          await createOrderNotification({
-            customerId: user._id,
-            title: "Order received",
-            message: `Your order ${order.orderCode} has been received and is now pending approval. You can track its status in My Orders.`,
-            actionUrl: "/my-orders",
-            entityId: String(order._id),
-          });
-          await notifyUsersByRoles({
-            roles: ["admin", "superadmin"],
-            title: "New customer order",
-            message: `Order ${order.orderCode} was placed by ${user.name || `${user.name_first} ${user.name_last}`.trim()}.`,
-            actionUrl: "/admin/orders",
-            entityType: "order",
-            entityId: String(order._id),
-          });
+        // Send real email receipt
+        if (canSendEmail()) {
+          try {
+            await sendEmail({
+              to: user.email,
+              subject: `Order Confirmation - ${order.orderCode}`,
+              text: `Thank you for your order! Your order code is ${order.orderCode}. Total: ₱${Number(order.totalAmount || 0).toLocaleString()}`,
+              html: `<h1>Thank you for your order!</h1><p>Your order code is <strong>${order.orderCode}</strong>.</p><p>Total Amount: ₱${Number(order.totalAmount || 0).toLocaleString()}</p>`,
+            });
+          } catch (emailErr) {
+            console.error("Failed to send order email:", emailErr);
+          }
         }
 
-        return res.status(order.duplicate ? 200 : 201).json({
-          order: orderPayload,
-          duplicate: Boolean(order.duplicate),
-          message: order.duplicate
-            ? "An identical order already exists. No duplicate stock deduction was performed."
-            : undefined,
+        return res.status(201).json({
+          order: {
+            ...order.toJSON(),
+            workflowLabel: workflowLabel(order.workflowStatus),
+          },
         });
       } catch (error) {
         if (error instanceof HttpError) {
@@ -475,10 +554,14 @@ const createOrder = async (req, res) => {
       }
     }
     console.error("Failed to create order:", lastError);
-    return res.status(500).json({ message: "Unable to create order right now." });
+    return res
+      .status(500)
+      .json({ message: "Unable to create order right now." });
   } catch (error) {
     console.error("Failed to create order:", error);
-    return res.status(500).json({ message: "Unable to create order right now." });
+    return res
+      .status(500)
+      .json({ message: "Unable to create order right now." });
   }
 };
 
@@ -488,14 +571,20 @@ const approveOrder = async (req, res) => {
   }
 
   const { orderId } = req.params;
-  const { assignedTechnician, estimatedArrival, installationDate } = req.body || {};
+  const { assignedTechnician, estimatedArrival, installationDate } =
+    req.body || {};
 
   const baseQuery = { $or: [{ _id: orderId }, { orderCode: orderId }] };
   const query = { ...baseQuery };
   if (req.authUser.role !== "superadmin" && req.activeBranch) {
     query.$and = [
       baseQuery,
-      { $or: [{ customerBranch: req.activeBranch }, { stockSourceBranch: req.activeBranch }] },
+      {
+        $or: [
+          { customerBranch: req.activeBranch },
+          { stockSourceBranch: req.activeBranch },
+        ],
+      },
     ];
     delete query.$or;
   }
@@ -529,7 +618,9 @@ const approveOrder = async (req, res) => {
 
 const listMyOrders = async (req, res) => {
   res.set("Cache-Control", "no-store");
-  const orders = await Order.find({ customer: req.authUser._id }).sort({ createdAt: -1 });
+  const orders = await Order.find({ customer: req.authUser._id }).sort({
+    createdAt: -1,
+  });
   console.log("List my orders", {
     userId: String(req.authUser._id),
     count: Number(orders.length || 0),
@@ -539,6 +630,25 @@ const listMyOrders = async (req, res) => {
       ...order.toJSON(),
       workflowLabel: workflowLabel(order.workflowStatus),
     })),
+  });
+};
+
+const getMyOrderById = async (req, res) => {
+  const { orderId } = req.params;
+  const order = await Order.findOne({
+    $or: [{ _id: orderId }, { orderCode: orderId }],
+    customer: req.authUser._id,
+  });
+
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+
+  return res.json({
+    order: {
+      ...order.toJSON(),
+      workflowLabel: workflowLabel(order.workflowStatus),
+    },
   });
 };
 
@@ -594,7 +704,12 @@ const processOrder = async (req, res) => {
   if (req.authUser.role !== "superadmin" && req.activeBranch) {
     query.$and = [
       baseQuery,
-      { $or: [{ customerBranch: req.activeBranch }, { stockSourceBranch: req.activeBranch }] },
+      {
+        $or: [
+          { customerBranch: req.activeBranch },
+          { stockSourceBranch: req.activeBranch },
+        ],
+      },
     ];
     delete query.$or;
   }
@@ -699,6 +814,7 @@ const processOrder = async (req, res) => {
 module.exports = {
   createOrder,
   listMyOrders,
+  getMyOrderById,
   getMyOrderSummary,
   approveOrder,
   listOrdersForAdmin,

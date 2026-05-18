@@ -1,53 +1,55 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import icons from '../common/icons';
-import { useUser } from '../../context/UserContext';
-import { apiRequest } from '../../config/api';
-import './ProfileCenter.css';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiRequest } from "../../config/api";
+import { useUser } from "../../context/UserContext";
+import "./ProfileCenter.css";
+// import icons from '../common/icons';
+const icons = {}; // BOUTIQUE MIGRATION STUB
 
 const normalizeOrder = (order = {}) => ({
-  id: String(order.id || order.orderCode || ''),
-  orderCode: String(order.orderCode || order.id || ''),
-  createdAt: String(order.createdAt || order.date || ''),
+  id: String(order.id || order.orderCode || ""),
+  orderCode: String(order.orderCode || order.id || ""),
+  createdAt: String(order.createdAt || order.date || ""),
   total: Number(order.totalAmount || order.total || 0),
-  workflowStatus: String(order.workflowStatus || order.status || 'to_pay'),
-  paymentMethod: String(order.paymentMethod || ''),
+  workflowStatus: String(order.workflowStatus || order.status || "to_pay"),
+  paymentMethod: String(order.paymentMethod || ""),
   receipt: order.receipt || null,
   items: Array.isArray(order.items) ? order.items : [],
 });
 
 const orderCategoryConfig = {
   to_pay: {
-    label: 'To Pay',
+    label: "To Pay",
     icon: icons.cartShoppingFast,
-    description: 'Unpaid orders',
+    description: "Unpaid orders",
   },
   to_deliver: {
-    label: 'To Deliver',
+    label: "To Deliver",
     icon: icons.boxOpen,
-    description: 'Pending delivery items',
+    description: "Pending delivery items",
   },
   to_install: {
-    label: 'To Install',
+    label: "To Install",
     icon: icons.tools,
-    description: 'Awaiting installation',
+    description: "Awaiting installation",
   },
   complete: {
-    label: 'Completed',
+    label: "Completed",
     icon: icons.checkCircle,
-    description: 'Finished or archived orders',
+    description: "Finished or archived orders",
   },
 };
 
 const getOrderCategory = (order) => {
   const status = order.workflowStatus;
-  if (status === 'to_deliver') return 'to_deliver';
-  if (status === 'to_install') return 'to_install';
-  if (status === 'complete') return 'complete';
-  return 'to_pay';
+  if (status === "to_deliver") return "to_deliver";
+  if (status === "to_install") return "to_install";
+  if (status === "complete") return "complete";
+  return "to_pay";
 };
 
-const getCategoryCount = (orders, category) => orders.filter((order) => getOrderCategory(order) === category).length;
+const getCategoryCount = (orders, category) =>
+  orders.filter((order) => getOrderCategory(order) === category).length;
 
 function ProfileCenter() {
   const navigate = useNavigate();
@@ -61,7 +63,7 @@ function ProfileCenter() {
     const loadOrders = async () => {
       setOrdersLoading(true);
       try {
-        const response = await apiRequest('/orders/me');
+        const response = await apiRequest("/orders/me");
         if (!mounted) return;
         setOrders((response.orders || []).map(normalizeOrder));
       } catch (_error) {
@@ -76,34 +78,57 @@ function ProfileCenter() {
 
     const pollId = window.setInterval(loadOrders, 25000);
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         loadOrders();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       mounted = false;
       window.clearInterval(pollId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
-  const orderStats = useMemo(() => [
-    { key: 'to_pay',     ...orderCategoryConfig.to_pay,     count: getCategoryCount(orders, 'to_pay') },
-    { key: 'to_deliver', ...orderCategoryConfig.to_deliver,  count: getCategoryCount(orders, 'to_deliver') },
-    { key: 'to_install', ...orderCategoryConfig.to_install,  count: getCategoryCount(orders, 'to_install') },
-    { key: 'complete',   ...orderCategoryConfig.complete,    count: getCategoryCount(orders, 'complete') },
-  ], [orders]);
+  const orderStats = useMemo(
+    () => [
+      {
+        key: "to_pay",
+        ...orderCategoryConfig.to_pay,
+        count: getCategoryCount(orders, "to_pay"),
+      },
+      {
+        key: "to_deliver",
+        ...orderCategoryConfig.to_deliver,
+        count: getCategoryCount(orders, "to_deliver"),
+      },
+      {
+        key: "to_install",
+        ...orderCategoryConfig.to_install,
+        count: getCategoryCount(orders, "to_install"),
+      },
+      {
+        key: "complete",
+        ...orderCategoryConfig.complete,
+        count: getCategoryCount(orders, "complete"),
+      },
+    ],
+    [orders],
+  );
 
-  const displayName = user?.name || user?.email || 'User';
+  const displayName = user?.name || user?.email || "User";
 
   return (
     <div className="profile-page">
       {/* ── Sticky header ── */}
       <div className="profile-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate('/home')} type="button">
+          <button
+            className="back-btn"
+            onClick={() => navigate("/home")}
+            type="button"
+          >
             ←
           </button>
           <div>
@@ -112,7 +137,11 @@ function ProfileCenter() {
           </div>
         </div>
 
-        <button type="button" className="header-action" onClick={() => navigate('/my-orders')}>
+        <button
+          type="button"
+          className="header-action"
+          onClick={() => navigate("/my-orders")}
+        >
           View Orders
         </button>
       </div>
@@ -126,7 +155,10 @@ function ProfileCenter() {
 
           {/* Profile identity hero card — overlaps banner */}
           <div className="card profile-hero-card">
-            <div className="profile-hero-top" style={{ alignItems: 'flex-start', gap: '24px' }}>
+            <div
+              className="profile-hero-top"
+              style={{ alignItems: "flex-start", gap: "24px" }}
+            >
               <div className="avatar-large">
                 <span>{displayName.charAt(0).toUpperCase()}</span>
               </div>
@@ -135,30 +167,24 @@ function ProfileCenter() {
                 <div className="profile-kicker">Account profile</div>
                 <h2 className="profile-name">{displayName}</h2>
                 <p className="profile-phone">
-                  Tap a purchase status below to inspect orders or contact support.
+                  Tap a purchase status to inspect orders or contact support.
                 </p>
-
-                {/* Meta chips: email / phone if available */}
-                {(user?.email || user?.phone) && (
-                  <div className="profile-hero-meta">
-                    {user?.email && (
-                      <span className="profile-hero-meta-chip">
-                        ✉ {user.email}
-                      </span>
-                    )}
-                    {user?.phone && (
-                      <span className="profile-hero-meta-chip">
-                        ☎ {user.phone}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <div className="profile-hero-actions" style={{ marginTop: '20px' }}>
-                  <button type="button" className="ghost-btn" onClick={() => navigate('/contact')}>
+                <div
+                  className="profile-hero-actions"
+                  style={{ marginTop: "20px" }}
+                >
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => navigate("/contact")}
+                  >
                     Help Center
                   </button>
-                  <button type="button" className="primary-btn" onClick={() => navigate('/contact')}>
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => navigate("/contact")}
+                  >
                     Chat with Cold Air
                   </button>
                 </div>
@@ -171,9 +197,15 @@ function ProfileCenter() {
             <div className="section-head section-head--spaced">
               <div>
                 <div className="profile-kicker">My Purchases</div>
-                <p className="section-subtitle">Tap a status to inspect orders</p>
+                <p className="section-subtitle">
+                  Tap a status to inspect orders
+                </p>
               </div>
-              <button type="button" className="ghost-btn" onClick={() => navigate('/my-orders')}>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => navigate("/my-orders")}
+              >
                 View all orders
               </button>
             </div>
@@ -182,7 +214,7 @@ function ProfileCenter() {
               className="order-stats-grid"
               role="tablist"
               aria-label="Order status filters"
-              style={{ marginTop: '24px' }}
+              style={{ marginTop: "24px" }}
             >
               {orderStats.map((stat) => (
                 <button
@@ -192,9 +224,15 @@ function ProfileCenter() {
                   onClick={() => navigate(`/my-orders?status=${stat.key}`)}
                   aria-label={`${stat.label}, ${stat.count} orders`}
                   title={stat.description}
+                  style={{ minHeight: "120px" }}
                 >
                   <span className="order-stat-icon-wrap">
-                    <img src={stat.icon} alt="" className="order-stat-icon" aria-hidden="true" />
+                    <img
+                      src={stat.icon}
+                      alt=""
+                      className="order-stat-icon"
+                      aria-hidden="true"
+                    />
                   </span>
                   <span className="order-stat-copy">
                     <span className="order-stat-label">{stat.label}</span>
@@ -205,14 +243,11 @@ function ProfileCenter() {
               ))}
             </div>
 
-            {ordersLoading && (
-              <p
-                className="profile-empty-state loading"
-                style={{ marginTop: '24px', padding: '16px 0' }}
-              >
-                <span>Loading orders…</span>
+            {ordersLoading ? (
+              <p className="profile-empty-state" style={{ marginTop: "24px" }}>
+                Loading orders...
               </p>
-            )}
+            ) : null}
           </div>
 
         </div>
