@@ -26,21 +26,40 @@ const { handleValidationError } = require("./middleware/validation");
 
 const app = express();
 
+const normalizeOrigin = (value) => String(value || "").trim().replace(/\/+$/, "");
+
 app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests without origin (server-to-server or same-origin)
       if (!origin) return callback(null, true);
+
+      const requestOrigin = normalizeOrigin(origin);
+
       // In development, allow any localhost origin (covers Expo web ports)
-      if (env.nodeEnv !== "production" && /https?:\/\/localhost(:\d+)?/.test(origin)) {
+      if (
+        env.nodeEnv !== "production" &&
+        /https?:\/\/localhost(:\d+)?/.test(requestOrigin)
+      ) {
         return callback(null, true);
       }
+
       // Otherwise allow only configured origins
-      const allowed = Array.isArray(env.corsOrigin)
-        ? env.corsOrigin
-        : [env.corsOrigin];
-      if (allowed.includes(origin)) return callback(null, true);
+      const configured = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
+      const allowed = new Set(
+        [
+          ...configured,
+          env.frontendUrl, // always allow the explicitly configured frontend
+        ]
+          .map(normalizeOrigin)
+          .filter(Boolean),
+      );
+
+      // Support "allow all" when explicitly configured (useful for quick Render fixes)
+      if (allowed.has("*")) return callback(null, true);
+
+      if (allowed.has(requestOrigin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
