@@ -412,7 +412,6 @@ const Shop = () => {
   const location = useLocation();
 
   const [backendProducts, setBackendProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -504,8 +503,6 @@ const Shop = () => {
         setBackendProducts(mapped);
       } catch (error) {
         console.error("Failed to fetch products:", error);
-      } finally {
-        setLoading(false);
       }
     };
     fetchProducts();

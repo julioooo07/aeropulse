@@ -5,7 +5,7 @@ import {
   ShieldCheck,
   Spinner,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { apiRequest } from "../../config/api";
 import BoutiqueButton from "../common/boutique/BoutiqueButton";
 import BoutiqueInput from "../common/boutique/BoutiqueInput";
@@ -29,13 +29,6 @@ export default function RegisterEmailStep({
 
   // Combine external and email errors
   const finalEmailError = externalErrors.email || emailError;
-
-  // Real-time verification when 6 digits are reached
-  useEffect(() => {
-    if (otpCode.length === 6 && hasSecret && !isVerified && !loading) {
-      handleVerifyCode();
-    }
-  }, [otpCode]);
 
   const handleStartVerification = async () => {
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -68,7 +61,7 @@ export default function RegisterEmailStep({
     }
   };
 
-  const handleVerifyCode = async () => {
+  const handleVerifyCode = useCallback(async () => {
     setLoading(true);
     setOtpError("");
 
@@ -94,7 +87,14 @@ export default function RegisterEmailStep({
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData.email, formData.registrationSecret, onFieldChange, otpCode]);
+
+  // Real-time verification when 6 digits are reached
+  useEffect(() => {
+    if (otpCode.length === 6 && hasSecret && !isVerified && !loading) {
+      handleVerifyCode();
+    }
+  }, [otpCode, hasSecret, isVerified, loading, handleVerifyCode]);
 
   return (
     <div className="bq-reg-step bq-fade-in">

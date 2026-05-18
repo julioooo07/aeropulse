@@ -2,7 +2,6 @@ import React from 'react';
 import './styles.css';
 
 const InventoryList = ({ products, loading, onRefresh, onRequestChange, onAddStock, getProductStock }) => {
-  const [pendingId, setPendingId] = React.useState('');
 
   const getStockDisplay = (product) => {
     if (getProductStock) {
@@ -46,8 +45,8 @@ const InventoryList = ({ products, loading, onRefresh, onRequestChange, onAddSto
               </td>
               <td>PHP {product.price}</td>
               <td style={{ minWidth: 160 }}>
-                <button type="button" onClick={() => onAddStock?.(product)} disabled={pendingId === product.id}>
-                  {pendingId === product.id ? 'Preparing...' : 'Add Stock'}
+                <button type="button" onClick={() => onAddStock?.(product)}>
+                  Add Stock
                 </button>
               </td>
 
@@ -57,7 +56,6 @@ const InventoryList = ({ products, loading, onRefresh, onRequestChange, onAddSto
                     type="button" 
                     className="btn-request-change"
                     onClick={() => onRequestChange(product)}
-                    disabled={pendingId === product.id}
                   >
                     Request Change
                   </button>

@@ -122,22 +122,6 @@ const HomeRoute = ({ children }) => {
   return children;
 };
 
-// Catch all route - redirects based on user role and auth status
-const RoleBasedCatchAll = () => {
-  const { isAuthenticated, loading, userRole } = useUser();
-
-  if (loading) {
-    return <div className="loading-screen">Loading...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/home" replace />;
-  }
-
-  // If authenticated, redirect to role-specific home
-  return <Navigate to={getRoleHomePath(userRole)} replace />;
-};
-
 // Main App content with routes
 function AppContent() {
   const {

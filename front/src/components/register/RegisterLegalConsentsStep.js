@@ -1,5 +1,4 @@
 import { ArrowRight, X } from "@phosphor-icons/react";
-import { useMemo } from "react";
 import BoutiqueButton from "../common/boutique/BoutiqueButton";
 import BoutiqueCheckbox from "../common/boutique/BoutiqueCheckbox";
 import { BQ_COLORS } from "../common/boutique/BoutiqueTheme";
@@ -34,9 +33,7 @@ export default function RegisterLegalConsentsStep({
     },
   ];
 
-  const allChecked = useMemo(() => {
-    return consents.every((c) => !!formData[c.id]);
-  }, [formData]);
+  const allChecked = consents.every((c) => !!formData[c.id]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

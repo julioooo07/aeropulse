@@ -78,13 +78,6 @@ function SuperAdminDashboard() {
     }
   };
 
-  const profileRows = [
-    { label: 'Name', value: user?.name || 'Super Admin' },
-    { label: 'Email', value: user?.email || 'superadmin@aeropulse.com' },
-    { label: 'Phone', value: user?.phone || '—' },
-    { label: 'Address', value: user?.address || '—' },
-  ];
-
   return (
     <SuperAdminLayout
       title="Super Admin Command Center"
