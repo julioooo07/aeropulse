@@ -1,6 +1,0 @@
-import React from "react";
-import { Redirect } from "expo-router";
-
-export default function ShopRedirect() {
-  return <Redirect href="/(customer)/(tabs)/shop" />;
-}

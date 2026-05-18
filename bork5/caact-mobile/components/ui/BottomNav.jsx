@@ -4,9 +4,12 @@
 import { View } from "react-native";
 
 import { COLORS } from "../../constants/theme";
+import { useCart } from "../../context/CartContext";
 import NavButton from "./NavButton";
 
 export default function BottomNav() {
+  const { count } = useCart();
+
   return (
     <View
       style={{
@@ -40,9 +43,10 @@ export default function BottomNav() {
       />
 
       <NavButton
-        href="/customer/faq"
-        icon={require("../../images/faq.png")}
-        label="FAQ"
+        href="/customer/cart"
+        icon={require("../../images/cart.png")}
+        label="Cart"
+        badge={count}
       />
 
       <NavButton
