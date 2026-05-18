@@ -3,6 +3,7 @@ import AdminLayout from '../Common/AdminLayout';
 import AddProduct from './AddProduct';
 import InventoryList from './InventoryList';
 import InventoryChangeRequestModal from './InventoryChangeRequestModal';
+import StockValidationModal from './StockValidationModal';
 import PendingApprovalsModal from './PendingApprovalsModal';
 import RestockOrderModal from './RestockOrderModal';
 import IncomingRestockModal from './IncomingRestockModal';
@@ -24,7 +25,9 @@ const AdminInventory = () => {
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
   const [showRestockOrder, setShowRestockOrder] = useState(false);
   const [showIncomingRestock, setShowIncomingRestock] = useState(false);
+  const [showStockValidation, setShowStockValidation] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedStockProduct, setSelectedStockProduct] = useState(null);
   const [branchFilter, setBranchFilter] = useState('');
 
   const BRANCHES = ['Bulacan', 'Cavite', 'Laguna', 'Bataan', 'Pangasinan', 'Ilocos'];
@@ -55,6 +58,11 @@ const AdminInventory = () => {
   const handleRequestChange = (product) => {
     setSelectedProduct(product);
     setShowChangeRequest(true);
+  };
+
+  const handleValidateStock = (product) => {
+    setSelectedStockProduct(product);
+    setShowStockValidation(true);
   };
 
   const filteredProducts = branchFilter
@@ -134,8 +142,8 @@ const AdminInventory = () => {
             products={filteredProducts} 
             loading={loading} 
             onRefresh={load}
-            branch={branchFilter}
             onRequestChange={isManager ? handleRequestChange : null}
+            onAddStock={handleValidateStock}
             getProductStock={getProductStock}
           />
         </div>
@@ -165,6 +173,22 @@ const AdminInventory = () => {
           />
         </>
       )}
+
+      <StockValidationModal
+        isOpen={showStockValidation}
+        product={selectedStockProduct}
+        currentStock={selectedStockProduct ? getProductStock(selectedStockProduct) : 0}
+        branch={branchFilter || activeBranch}
+        onClose={() => {
+          setShowStockValidation(false);
+          setSelectedStockProduct(null);
+        }}
+        onSuccess={() => {
+          setShowStockValidation(false);
+          setSelectedStockProduct(null);
+          load();
+        }}
+      />
 
       {isOwner && (
         <>

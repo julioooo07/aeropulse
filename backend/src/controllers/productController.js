@@ -382,7 +382,17 @@ const updateBranchStock = async (req, res) => {
   if (!requireAdmin(req, res)) return null;
 
   const { productId } = req.params;
-  const { branch, action = "set", quantity = 0 } = req.body || {};
+  const {
+    branch,
+    action = "set",
+    quantity = 0,
+    addedByName = "",
+    deliveredByName = "",
+    deliveryCompany = "",
+    deliveryDate = null,
+    referenceNumber = "",
+    notes = "",
+  } = req.body || {};
 
   const product = await Product.findById(productId);
   if (!product) {
@@ -416,11 +426,23 @@ const updateBranchStock = async (req, res) => {
     branch: scopedBranch,
     user: req.authUser._id,
     quantity: qty,
-    referenceType: "branch_stock_update",
-    referenceNumber: String(product.sku || product.name || ""),
+    referenceType: "stock_validation",
+    referenceNumber: String(referenceNumber || product.sku || product.name || ""),
     relatedEntityType: "product",
     relatedEntityId: product._id,
-    notes: `Branch stock addition for ${product.name}`,
+    notes: [
+      `Branch stock addition for ${product.name}`,
+      notes?.trim() ? `Notes: ${notes.trim()}` : "",
+      addedByName?.trim() ? `Added by: ${addedByName.trim()}` : "",
+      deliveredByName?.trim() ? `Delivered by: ${deliveredByName.trim()}` : "",
+      deliveryCompany?.trim() ? `Delivery company: ${deliveryCompany.trim()}` : "",
+      referenceNumber?.trim() ? `Reference number: ${referenceNumber.trim()}` : "",
+      deliveryDate ? `Delivery date: ${new Date(deliveryDate).toISOString()}` : "",
+    ].filter(Boolean).join(" | "),
+    addedByName: String(addedByName || "").trim(),
+    deliveredByName: String(deliveredByName || "").trim(),
+    deliveryCompany: String(deliveryCompany || "").trim(),
+    deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
     productName: product.name,
   });
 

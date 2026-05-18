@@ -90,16 +90,17 @@ function ProfileCenter() {
   }, []);
 
   const orderStats = useMemo(() => [
-    { key: 'to_pay', ...orderCategoryConfig.to_pay, count: getCategoryCount(orders, 'to_pay') },
-    { key: 'to_deliver', ...orderCategoryConfig.to_deliver, count: getCategoryCount(orders, 'to_deliver') },
-    { key: 'to_install', ...orderCategoryConfig.to_install, count: getCategoryCount(orders, 'to_install') },
-    { key: 'complete', ...orderCategoryConfig.complete, count: getCategoryCount(orders, 'complete') },
+    { key: 'to_pay',     ...orderCategoryConfig.to_pay,     count: getCategoryCount(orders, 'to_pay') },
+    { key: 'to_deliver', ...orderCategoryConfig.to_deliver,  count: getCategoryCount(orders, 'to_deliver') },
+    { key: 'to_install', ...orderCategoryConfig.to_install,  count: getCategoryCount(orders, 'to_install') },
+    { key: 'complete',   ...orderCategoryConfig.complete,    count: getCategoryCount(orders, 'complete') },
   ], [orders]);
 
   const displayName = user?.name || user?.email || 'User';
 
   return (
     <div className="profile-page">
+      {/* ── Sticky header ── */}
       <div className="profile-header">
         <div className="header-left">
           <button className="back-btn" onClick={() => navigate('/home')} type="button">
@@ -116,17 +117,43 @@ function ProfileCenter() {
         </button>
       </div>
 
+      {/* ── Hero banner (purely decorative) ── */}
+      <div className="profile-banner" aria-hidden="true" />
+
+      {/* ── Page body ── */}
       <div className="profile-layout">
         <div className="profile-left">
+
+          {/* Profile identity hero card — overlaps banner */}
           <div className="card profile-hero-card">
             <div className="profile-hero-top" style={{ alignItems: 'flex-start', gap: '24px' }}>
               <div className="avatar-large">
                 <span>{displayName.charAt(0).toUpperCase()}</span>
               </div>
+
               <div className="profile-identity">
                 <div className="profile-kicker">Account profile</div>
                 <h2 className="profile-name">{displayName}</h2>
-                <p className="profile-phone">Tap a purchase status to inspect orders or contact support.</p>
+                <p className="profile-phone">
+                  Tap a purchase status below to inspect orders or contact support.
+                </p>
+
+                {/* Meta chips: email / phone if available */}
+                {(user?.email || user?.phone) && (
+                  <div className="profile-hero-meta">
+                    {user?.email && (
+                      <span className="profile-hero-meta-chip">
+                        ✉ {user.email}
+                      </span>
+                    )}
+                    {user?.phone && (
+                      <span className="profile-hero-meta-chip">
+                        ☎ {user.phone}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="profile-hero-actions" style={{ marginTop: '20px' }}>
                   <button type="button" className="ghost-btn" onClick={() => navigate('/contact')}>
                     Help Center
@@ -139,6 +166,7 @@ function ProfileCenter() {
             </div>
           </div>
 
+          {/* Order status tiles */}
           <div className="card profile-orders-card">
             <div className="section-head section-head--spaced">
               <div>
@@ -150,7 +178,12 @@ function ProfileCenter() {
               </button>
             </div>
 
-            <div className="order-stats-grid" role="tablist" aria-label="Order status filters" style={{ marginTop: '24px' }}>
+            <div
+              className="order-stats-grid"
+              role="tablist"
+              aria-label="Order status filters"
+              style={{ marginTop: '24px' }}
+            >
               {orderStats.map((stat) => (
                 <button
                   key={stat.key}
@@ -159,7 +192,6 @@ function ProfileCenter() {
                   onClick={() => navigate(`/my-orders?status=${stat.key}`)}
                   aria-label={`${stat.label}, ${stat.count} orders`}
                   title={stat.description}
-                  style={{ minHeight: '120px' }}
                 >
                   <span className="order-stat-icon-wrap">
                     <img src={stat.icon} alt="" className="order-stat-icon" aria-hidden="true" />
@@ -173,10 +205,16 @@ function ProfileCenter() {
               ))}
             </div>
 
-            {ordersLoading ? (
-              <p className="profile-empty-state" style={{ marginTop: '24px' }}>Loading orders...</p>
-            ) : null}
+            {ordersLoading && (
+              <p
+                className="profile-empty-state loading"
+                style={{ marginTop: '24px', padding: '16px 0' }}
+              >
+                <span>Loading orders…</span>
+              </p>
+            )}
           </div>
+
         </div>
       </div>
     </div>

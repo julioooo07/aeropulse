@@ -33,6 +33,7 @@ import SuperAdminDashboard from './components/SUPERADMIN/Dashboard/SuperAdminDas
 import SuperAdminBranches from './components/SUPERADMIN/Dashboard/SuperAdminBranches';
 import SuperAdminSales from './components/SUPERADMIN/Dashboard/SuperAdminSales';
 import SuperAdminInventory from './components/SUPERADMIN/Dashboard/SuperAdminInventory';
+import SuperAdminInventoryLogs from './components/SUPERADMIN/Dashboard/Superadmininventorylogs';
 import SuperAdminTasks from './components/SUPERADMIN/Dashboard/SuperAdminTasks';
 import SuperAdminAlerts from './components/SUPERADMIN/Dashboard/SuperAdminAlerts';
 import GlobalDialog from './components/common/GlobalDialog';
@@ -93,10 +94,14 @@ const PublicRoute = ({ children }) => {
 
 // Home Route - Accessible to both authenticated and unauthenticated users
 const HomeRoute = ({ children }) => {
-  const { loading } = useUser();
+  const { loading, isAuthenticated, userRole } = useUser();
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
+  }
+
+  if (isAuthenticated && userRole && userRole !== 'customer') {
+    return <Navigate to={getRoleHomePath(userRole)} replace />;
   }
 
   return children;
@@ -138,10 +143,10 @@ function AppContent() {
   return (
     <>
       <Routes>
-        {/* Root path redirects to home */}
+        {/* Root path redirects based on authentication and role */}
         <Route 
           path="/" 
-          element={<Navigate to="/home" replace />}
+          element={<RoleBasedCatchAll />}
         />
       
       {/* Public routes */}
@@ -407,7 +412,7 @@ function AppContent() {
         path="/superadmin/inventory-logs"
         element={
           <RoleRoute allowedRoles={['superadmin']}>
-            <AdminInventoryLogs />
+            <SuperAdminInventoryLogs />
           </RoleRoute>
         }
       />

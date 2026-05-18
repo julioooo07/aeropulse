@@ -104,6 +104,16 @@ const inventoryTransactionSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    addedByName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    deliveredByName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     supplierName: {
       type: String,
       default: "",

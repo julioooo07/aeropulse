@@ -40,6 +40,22 @@ function Home() {
   const [notifications, setNotifications] = useState([]);
   const previousNotificationIdsRef = useRef(new Set());
 
+  // Initialize seen IDs from localStorage so alerts don't repeat across navigation
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('seenNotificationIds');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          previousNotificationIdsRef.current = new Set(parsed);
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+      previousNotificationIdsRef.current = new Set();
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
       setNotifications([]);
@@ -71,6 +87,12 @@ function Home() {
         
         setNotifications(normalized);
         previousNotificationIdsRef.current = currentIds;
+        // persist seen IDs so alerts won't repeat when the user revisits the page
+        try {
+          localStorage.setItem('seenNotificationIds', JSON.stringify(Array.from(currentIds)));
+        } catch (e) {
+          // ignore storage errors
+        }
       })
       .catch(() => {
         setNotifications([]);
