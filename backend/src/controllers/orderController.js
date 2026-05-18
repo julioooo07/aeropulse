@@ -3,6 +3,7 @@ const Product = require("../models/Product");
 const Task = require("../models/Task");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+const InventoryTransaction = require("../models/InventoryTransaction");
 const mongoose = require("mongoose");
 const { canSendEmail, sendEmail } = require("../utils/email");
 const {
@@ -63,6 +64,87 @@ const resolveProductForOrderItem = async (item, session = null) => {
   return null;
 };
 
+const normalizeOrderItemKey = (item = {}) => {
+  const productId = String(item.productId || item.id || item._id || "").trim();
+  const quantity = Number(item.quantity || 0);
+  const price = Number(item.price || 0);
+  const specs = String(item.specs || "").trim();
+  return `${productId}|${quantity}|${price}|${specs}`;
+};
+
+const orderItemsMatch = (existingItems = [], expectedItems = []) => {
+  const existingKeys = existingItems.map((item) => normalizeOrderItemKey(item)).sort();
+  const expectedKeys = expectedItems.map((item) => normalizeOrderItemKey(item)).sort();
+  return (
+    existingKeys.length === expectedKeys.length &&
+    existingKeys.every((key, index) => key === expectedKeys[index])
+  );
+};
+
+const findRecentDuplicateOrder = async (userId, items, address, totalAmount, session = null) => {
+  if (!userId || !Array.isArray(items) || items.length === 0) return null;
+  const recentWindow = new Date(Date.now() - 1000 * 60 * 5);
+  const query = {
+    customer: userId,
+    status: "pending",
+    workflowStatus: "to_pay",
+    totalAmount: totalAmount,
+    createdAt: { $gte: recentWindow },
+    "address.street": String(address.street || "").trim(),
+    "address.city": String(address.city || "").trim(),
+    "address.phone": String(address.phone || "").trim(),
+  };
+
+  const candidateOrders = await Order.find(query).session(session).sort({ createdAt: -1 }).limit(5);
+  return candidateOrders.find((existing) => orderItemsMatch(existing.items || [], items)) || null;
+};
+
+const getBranchStockValue = (product, branch) => Number(product.branchStock?.get(branch) || 0);
+
+const deductProductStock = (product, preferredBranch, quantityNeeded, branchSearchOrder) => {
+  const normalizedQuantity = Math.max(0, Number(quantityNeeded) || 0);
+  const searchOrder = Array.isArray(branchSearchOrder) ? branchSearchOrder.filter(Boolean) : [];
+  const branchAvailability = searchOrder.map((branch) => ({
+    branch,
+    available: Math.max(0, getBranchStockValue(product, branch)),
+  }));
+  const hasBranchSnapshot = branchAvailability.some(({ available }) => available > 0);
+
+  if (hasBranchSnapshot) {
+    const totalAvailable = branchAvailability.reduce((sum, item) => sum + item.available, 0);
+    if (totalAvailable < normalizedQuantity) {
+      throw new HttpError(409, `Insufficient stock for ${product.name}. Only ${totalAvailable} remaining.`);
+    }
+
+    let remaining = normalizedQuantity;
+    const allocations = [];
+    for (const { branch, available } of branchAvailability) {
+      if (remaining <= 0) break;
+      const deducted = Math.min(available, remaining);
+      if (deducted <= 0) continue;
+      product.branchStock.set(branch, available - deducted);
+      allocations.push({ branch, deducted });
+      remaining -= deducted;
+    }
+
+    product.stock = branchSearchOrder.reduce((sum, branch) => sum + getBranchStockValue(product, branch), 0);
+    return allocations;
+  }
+
+  const totalAvailable = Math.max(0, Number(product.stock || 0));
+  if (totalAvailable < normalizedQuantity) {
+    throw new HttpError(409, `Insufficient stock for ${product.name}. Only ${totalAvailable} remaining.`);
+  }
+
+  const branchName = preferredBranch || searchOrder[0] || "";
+  const remaining = totalAvailable - normalizedQuantity;
+  if (branchName) {
+    product.branchStock.set(branchName, remaining);
+  }
+  product.stock = remaining;
+  return branchName ? [{ branch: branchName, deducted: normalizedQuantity }] : [];
+};
+
 class HttpError extends Error {
   constructor(status, message) {
     super(message);
@@ -70,7 +152,7 @@ class HttpError extends Error {
   }
 }
 
-const createOrderNotification = async ({ customerId, title, message }) => {
+const createOrderNotification = async ({ customerId, title, message, actionUrl = "/my-orders", entityId = "" }) => {
   if (!customerId || !title || !message) return;
   try {
     const user = await User.findById(customerId).select("notifications");
@@ -89,8 +171,9 @@ const createOrderNotification = async ({ customerId, title, message }) => {
       type: "order",
       title,
       message,
-      unread: true,
-      status: "unread",
+      actionUrl,
+      entityType: "order",
+      entityId,
     });
   } catch (error) {
     console.error("Failed to create order notification:", error);
@@ -243,6 +326,11 @@ const createOrder = async (req, res) => {
     return res.status(400).json({ message: "Invalid delivery address." });
   }
 
+  const orderTotal = Number(total);
+  if (!Number.isFinite(orderTotal) || orderTotal < 0) {
+    return res.status(400).json({ message: "Invalid order total." });
+  }
+
   const orderCode = `ORD-${Date.now()}`;
   const receiptNumber = `RCP-${Date.now()}`;
   const trackingNumber = `TRK-${Math.floor(Math.random() * 1000000000)}`;
@@ -264,11 +352,12 @@ const createOrder = async (req, res) => {
       await session.withTransaction(async () => {
         const mutableProducts = [];
         const resolvedItems = [];
+        const transactionCandidates = [];
         let lastSourceBranch = null;
 
         for (const item of items) {
-          const quantityNeeded = Number(item.quantity) || 0;
-          if (quantityNeeded < 1) {
+          const quantityNeeded = Math.floor(Number(item.quantity));
+          if (!Number.isFinite(quantityNeeded) || quantityNeeded < 1) {
             throw new HttpError(400, "Invalid cart item payload.");
           }
 
@@ -318,13 +407,41 @@ const createOrder = async (req, res) => {
           mutableProducts.push(product);
 
           resolvedItems.push({
-            productId: String(product.id || ""),
+            product,
+            productId: String(product._id),
             name: item.name || product.name,
             price: Number(item.price) || Number(product.price || 0),
             quantity: quantityNeeded,
             specs: item.specs || product.specs || "",
-            sourceBranch: finalBranch,
+            sourceBranch: preferredBranch,
           });
+        }
+
+        const duplicateOrder = await findRecentDuplicateOrder(
+          user._id,
+          resolvedItems,
+          normalizedAddress,
+          orderTotal,
+          session
+        );
+
+        if (duplicateOrder) {
+          duplicateOrder.duplicate = true;
+          createdOrder = duplicateOrder;
+          return;
+        }
+
+        for (const item of resolvedItems) {
+          const allocations = allocateProductStock(item.product, item.quantity, preferredBranch, branchSearchOrder);
+          lastSourceBranch = allocations[0]?.branch || preferredBranch;
+          mutableProducts.push(item.product);
+          transactionCandidates.push({
+            product: item.product,
+            allocations,
+            sourceBranch: allocations[0]?.branch || preferredBranch,
+          });
+
+          item.sourceBranch = allocations[0]?.branch || preferredBranch;
         }
 
         await Promise.all(
@@ -358,7 +475,7 @@ const createOrder = async (req, res) => {
                 receiptNumber,
                 issuedAt: new Date().toISOString(),
                 paymentMethod,
-                amountPaid: Number(total) || 0,
+                amountPaid: orderTotal,
                 itemsSummary,
               },
               totalAmount: total,
@@ -368,6 +485,19 @@ const createOrder = async (req, res) => {
           ],
           { session },
         );
+
+        const createdOrderDoc = Array.isArray(createdOrder) ? createdOrder[0] : createdOrder;
+
+        await logOrderDeductionTransactions({
+          items: transactionCandidates,
+          orderCode,
+          trackingNumber,
+          userId: user._id,
+          orderId: createdOrderDoc._id,
+          session,
+        });
+
+        createdOrder = createdOrderDoc;
       });
 
       return Array.isArray(createdOrder) ? createdOrder[0] : createdOrder;
@@ -610,26 +740,66 @@ const processOrder = async (req, res) => {
     await createTaskForOrder(order);
     await createOrderNotification({
       customerId: order.customer,
-      title: "COD approved",
-      message: `Your payment for order ${order.orderCode} was approved. Your order is now in TO DELIVER stage.`,
+      title: "Order approved",
+      message: `Your order ${order.orderCode} was approved and is now queued for delivery scheduling.`,
+      actionUrl: "/my-orders",
+      entityId: String(order._id),
+    });
+    await notifyUsersByRoles({
+      roles: ["admin", "superadmin"],
+      title: "Order moved to delivery",
+      message: `Order ${order.orderCode} is now in TO DELIVER stage.`,
+      actionUrl: "/admin/orders",
+      entityType: "order",
+      entityId: String(order._id),
     });
   } else if (action === "dispatch") {
     await createOrderNotification({
       customerId: order.customer,
       title: "Order dispatched",
       message: `Your order ${order.orderCode} is on the way and moved to TO INSTALL stage.`,
+      actionUrl: "/my-orders",
+      entityId: String(order._id),
+    });
+    await notifyUsersByRoles({
+      roles: ["admin", "superadmin"],
+      title: "Order dispatched",
+      message: `Order ${order.orderCode} has been dispatched and moved to TO INSTALL stage.`,
+      actionUrl: "/admin/dashboard",
+      entityType: "order",
+      entityId: String(order._id),
     });
   } else if (action === "complete") {
     await createOrderNotification({
       customerId: order.customer,
       title: "Order completed",
       message: `Your order ${order.orderCode} has been completed. Thank you for choosing AeroPulse.`,
+      actionUrl: "/my-orders",
+      entityId: String(order._id),
+    });
+    await notifyUsersByRoles({
+      roles: ["admin", "superadmin"],
+      title: "Order completed",
+      message: `Order ${order.orderCode} is complete and ready for reporting.`,
+      actionUrl: "/admin/reports",
+      entityType: "order",
+      entityId: String(order._id),
     });
   } else if (action === "cancel") {
     await createOrderNotification({
       customerId: order.customer,
       title: "Order cancelled",
       message: `Your order ${order.orderCode} has been cancelled. Please contact support if you need assistance.`,
+      actionUrl: "/my-orders",
+      entityId: String(order._id),
+    });
+    await notifyUsersByRoles({
+      roles: ["admin", "superadmin"],
+      title: "Order cancelled",
+      message: `Order ${order.orderCode} has been cancelled. Review the order for next steps.`,
+      actionUrl: "/admin/orders",
+      entityType: "order",
+      entityId: String(order._id),
     });
   }
 

@@ -109,13 +109,33 @@ const PublicRoute = ({ children }) => {
 
 // Home Route - Accessible to both authenticated and unauthenticated users
 const HomeRoute = ({ children }) => {
-  const { loading } = useUser();
+  const { loading, isAuthenticated, userRole } = useUser();
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
 
+  if (isAuthenticated && userRole && userRole !== 'customer') {
+    return <Navigate to={getRoleHomePath(userRole)} replace />;
+  }
+
   return children;
+};
+
+// Catch all route - redirects based on user role and auth status
+const RoleBasedCatchAll = () => {
+  const { isAuthenticated, loading, userRole } = useUser();
+
+  if (loading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/home" replace />;
+  }
+
+  // If authenticated, redirect to role-specific home
+  return <Navigate to={getRoleHomePath(userRole)} replace />;
 };
 
 // Main App content with routes

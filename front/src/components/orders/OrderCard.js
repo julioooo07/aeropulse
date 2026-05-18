@@ -1,6 +1,15 @@
 // import icons from '../common/icons';
 const icons = {}; // BOUTIQUE MIGRATION STUB
 
+const ORDER_PROGRESS_STAGES = [
+  'Order Placed',
+  'Order Confirmed',
+  'Preparing Unit',
+  'Out for Delivery',
+  'Installation Scheduled',
+  'Completed',
+];
+
 function OrderCard({ order, onTrack, onReorder }) {
   const getStatusClass = (status) => {
     switch (status) {
@@ -19,6 +28,35 @@ function OrderCard({ order, onTrack, onReorder }) {
       default:
         return "";
     }
+  };
+
+  const getStageIndex = () => {
+    const map = {
+      to_pay: 0,
+      to_deliver: 2,
+      to_install: 4,
+      complete: 5,
+      cancelled: 0,
+    };
+    return map[order.status] ?? 0;
+  };
+
+  const getStageTimestamp = (index) => {
+    if (index === 0) return order.date;
+    if (index === 1) return order.receipt?.issuedAt || order.date;
+    if (index === 2) return order.estimatedDelivery || order.estimatedArrival || null;
+    if (index === 3) return order.estimatedArrival || order.estimatedDelivery || null;
+    if (index === 4) return order.installationDate || null;
+    if (index === 5) return order.installationDate || order.estimatedArrival || order.date;
+    return null;
+  };
+
+  const currentStage = getStageIndex();
+
+  const getStepStatus = (index) => {
+    if (index < currentStage) return 'completed';
+    if (index === currentStage) return 'active';
+    return 'upcoming';
   };
 
   const getStatusText = (status) => {
@@ -57,6 +95,27 @@ function OrderCard({ order, onTrack, onReorder }) {
         <div className={`order-status ${getStatusClass(order.status)}`}>
           {getStatusText(order.status)}
         </div>
+      </div>
+
+      <div className="order-progress">
+        {ORDER_PROGRESS_STAGES.map((label, index) => {
+          const stepStatus = getStepStatus(index);
+          const stepTime = getStageTimestamp(index);
+          return (
+            <div key={label} className={`progress-step progress-step--${stepStatus}`}>
+              <div className="progress-marker">
+                <span className="progress-dot" />
+                <span className="progress-label">{label}</span>
+              </div>
+              {stepTime && (
+                <div className="progress-time">{new Date(stepTime).toLocaleDateString()}</div>
+              )}
+              {index < ORDER_PROGRESS_STAGES.length - 1 && (
+                <div className={`progress-connector progress-connector--${stepStatus}`} />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="order-body">

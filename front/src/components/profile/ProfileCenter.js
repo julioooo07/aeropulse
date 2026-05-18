@@ -121,6 +121,7 @@ function ProfileCenter() {
 
   return (
     <div className="profile-page">
+      {/* ── Sticky header ── */}
       <div className="profile-header">
         <div className="header-left">
           <button
@@ -145,8 +146,14 @@ function ProfileCenter() {
         </button>
       </div>
 
+      {/* ── Hero banner (purely decorative) ── */}
+      <div className="profile-banner" aria-hidden="true" />
+
+      {/* ── Page body ── */}
       <div className="profile-layout">
         <div className="profile-left">
+
+          {/* Profile identity hero card — overlaps banner */}
           <div className="card profile-hero-card">
             <div
               className="profile-hero-top"
@@ -155,6 +162,7 @@ function ProfileCenter() {
               <div className="avatar-large">
                 <span>{displayName.charAt(0).toUpperCase()}</span>
               </div>
+
               <div className="profile-identity">
                 <div className="profile-kicker">Account profile</div>
                 <h2 className="profile-name">{displayName}</h2>
@@ -184,6 +192,7 @@ function ProfileCenter() {
             </div>
           </div>
 
+          {/* Order status tiles */}
           <div className="card profile-orders-card">
             <div className="section-head section-head--spaced">
               <div>
@@ -240,6 +249,7 @@ function ProfileCenter() {
               </p>
             ) : null}
           </div>
+
         </div>
       </div>
     </div>

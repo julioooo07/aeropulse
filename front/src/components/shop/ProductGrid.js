@@ -92,6 +92,26 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
             <div className="product-brand">{product.brand}</div>
             <div className="product-name">{product.name}</div>
             <div className="product-specs">{product.specs}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  letterSpacing: '0.02em',
+                  background: stockState === 'out' ? '#fef2f2' : stockState === 'low' ? '#fff7ed' : '#ecfdf5',
+                  color: stockState === 'out' ? '#b91c1c' : stockState === 'low' ? '#b45309' : '#166534',
+                }}
+              >
+                {stockLabel}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: stockState === 'low' ? '#b45309' : '#374151' }}>
+                Available Stocks: {stock}
+              </span>
+            </div>
             <div className="product-price">
               {"\u20b1"}
               {product.price.toLocaleString()}
@@ -152,6 +172,8 @@ function ProductGrid({ products, onAddToCart, onBuyNow, onProductClick }) {
             </div>
           </div>
         </div>
+          );
+        })()
       ))}
     </div>
   );

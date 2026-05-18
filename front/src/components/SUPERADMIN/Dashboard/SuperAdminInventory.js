@@ -25,7 +25,6 @@ const SuperAdminDashboard = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        // Load centralized stats across all branches
         const result = await apiRequest('/dashboard/superadmin');
         setStats(result.stats || null);
         setAnalytics(result.analytics || null);
@@ -96,83 +95,98 @@ const SuperAdminDashboard = () => {
 
   return (
     <SuperAdminLayout title="Super Admin Dashboard" subtitle="Centralized analytics across all branches">
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-        {/* Stats Cards */}
-        {stats && (
-          <div className="super-stats-grid" style={{ width: '100%', maxWidth: '1200px', marginBottom: '2rem' }}>
-            <div className="super-stat-card">
-              <h4>Total Sales</h4>
-              <p className="super-stat-value">PHP {stats.totalSales?.toLocaleString() || 0}</p>
-              <p className="super-stat-label">Across all branches</p>
-            </div>
-            <div className="super-stat-card">
-              <h4>Total Orders</h4>
-              <p className="super-stat-value">{stats.totalOrders || 0}</p>
-              <p className="super-stat-label">All branches combined</p>
-            </div>
-            <div className="super-stat-card">
-              <h4>Active Technicians</h4>
-              <p className="super-stat-value">{stats.activeTechnicians || 0}</p>
-              <p className="super-stat-label">Across all branches</p>
-            </div>
-            <div className="super-stat-card">
-              <h4>Low Stock Alerts</h4>
-              <p className="super-stat-value">{alerts.length}</p>
-              <p className="super-stat-label">Items below threshold</p>
-            </div>
-          </div>
-        )}
 
-        {/* Analytics Charts */}
-        <div style={{ width: '100%', maxWidth: '1200px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-          <div className="super-card">
-            <SalesAnalyticsChart 
-              data={report.monthlySeries} 
-              period={selectedSalesPeriod}
-              onPeriodChange={setSelectedSalesPeriod}
-              title="Sales Analytics - All Branches"
-            />
+      {/* Stats Cards */}
+      {stats && (
+        <div className="super-stats-grid">
+          <div className="super-stat-card">
+            <h4>Total Sales</h4>
+            <p className="super-stat-value">₱{stats.totalSales?.toLocaleString() || 0}</p>
+            <p className="super-stat-label">Across all branches</p>
           </div>
-          <div className="super-card">
-            <TopProductsChart 
-              data={report.topProducts} 
-              title="Top Products - All Branches"
-            />
+          <div className="super-stat-card">
+            <h4>Total Orders</h4>
+            <p className="super-stat-value">{stats.totalOrders || 0}</p>
+            <p className="super-stat-label">All branches combined</p>
+          </div>
+          <div className="super-stat-card">
+            <h4>Active Technicians</h4>
+            <p className="super-stat-value">{stats.activeTechnicians || 0}</p>
+            <p className="super-stat-label">Across all branches</p>
+          </div>
+          <div className="super-stat-card">
+            <h4>Low Stock Alerts</h4>
+            <p className="super-stat-value">{alerts.length}</p>
+            <p className="super-stat-label">Items below threshold</p>
           </div>
         </div>
+      )}
 
-        <div style={{ width: '100%', maxWidth: '1200px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-          <div className="super-card">
-            <TechnicianKPIs 
-              data={analytics?.technicianKPIs || []} 
-              title="Technician Performance - All Branches"
-            />
-          </div>
-          <div className="super-card">
-            <CustomerAcquisitionChart 
-              data={analytics?.customerAcquisition || []} 
-              title="Customer Acquisition - All Branches"
-            />
-          </div>
+      {/* Analytics Charts */}
+      <div className="super-grid-2">
+        <div className="super-card">
+          <SalesAnalyticsChart
+            data={report.monthlySeries}
+            period={selectedSalesPeriod}
+            onPeriodChange={setSelectedSalesPeriod}
+            title="Sales Analytics — All Branches"
+          />
         </div>
-
-        {/* Inventory Risk Board */}
-        <div className="super-card" style={{ width: '100%', maxWidth: '1200px' }}>
-          <h3>Inventory Risk Board</h3>
-          {error ? <p style={{ color: '#b91c1c' }}>{error}</p> : null}
-          <div className="super-list">
-            {alerts.length === 0 ? <p>No low stock alerts right now.</p> : null}
-            {alerts.map((alert) => (
-              <div key={alert.id} className="super-list-item">
-                <strong>{alert.item}</strong>
-                <p>{alert.branch}</p>
-                <p>Stock: {alert.stock} / Threshold: {alert.threshold}</p>
-                <p>Level: {alert.level}</p>
-              </div>
-            ))}
-          </div>
+        <div className="super-card">
+          <TopProductsChart
+            data={report.topProducts}
+            title="Top Products — All Branches"
+          />
         </div>
       </div>
+
+      <div className="super-grid-2">
+        <div className="super-card">
+          <TechnicianKPIs
+            data={analytics?.technicianKPIs || []}
+            title="Technician Performance — All Branches"
+          />
+        </div>
+        <div className="super-card">
+          <CustomerAcquisitionChart
+            data={analytics?.customerAcquisition || []}
+            title="Customer Acquisition — All Branches"
+          />
+        </div>
+      </div>
+
+      {/* Inventory Risk Board */}
+      <div className="super-card">
+        <div className="super-section-header">
+          <h3>Inventory Risk Board</h3>
+          {alerts.length > 0 && (
+            <span className="super-badge super-badge--high">{alerts.length} Alerts</span>
+          )}
+        </div>
+
+        {error && <p style={{ color: 'var(--status-cancel-text)', fontSize: 13 }}>{error}</p>}
+
+        <div className="super-list">
+          {alerts.length === 0 && !error && (
+            <div className="super-empty">
+              <p>No low stock alerts right now. All branches are stocked.</p>
+            </div>
+          )}
+          {alerts.map((alert) => (
+            <div key={alert.id} className="super-list-item">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                <strong>{alert.item}</strong>
+                <span className={alert.level === 'Critical' ? 'super-badge super-badge--high' : 'super-badge super-badge--medium'}>
+                  {alert.level}
+                </span>
+              </div>
+              <p>Branch: {alert.branch}</p>
+              <p>Stock: {alert.stock} / Threshold: {alert.threshold}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </SuperAdminLayout>
   );
 };

@@ -7,6 +7,7 @@ const env = require("./config/env");
 const connectDb = require("./config/db");
 const { seedDemoUsers } = require("./seed/seedDemoUsers");
 const { seedDashboardData } = require("./seed/seedDashboardData");
+const { startInventoryMonitor } = require("./domain/inventoryMonitor");
 
 // Debug - check if it loaded
 console.log("MONGODB_URI loaded:", process.env.MONGODB_URI ? "YES" : "NO");
@@ -30,6 +31,9 @@ const start = async () => {
     const server = app.listen(env.port, () => {
       console.log(`Backend running on http://localhost:${env.port}`);
     });
+
+    const monitorIntervalMs = Number(process.env.INVENTORY_MONITOR_INTERVAL_MS || 60000);
+    startInventoryMonitor({ intervalMs: monitorIntervalMs });
 
     // Handle server errors
     server.on("error", (error) => {

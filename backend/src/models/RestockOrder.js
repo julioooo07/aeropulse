@@ -43,6 +43,21 @@ const restockOrderSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    trackingNumber: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    deliveryCompany: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    deliveredBy: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     actualDeliveryDate: {
       type: Date,
       default: null,

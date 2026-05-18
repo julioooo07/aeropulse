@@ -1,54 +1,14 @@
 import React from 'react';
-import { apiRequest } from '../../../config/api';
-import { useUser } from '../../../context/UserContext';
-import { appendAuditLog } from '../../../utils/auditLogs';
 import './styles.css';
 
-const InventoryList = ({ products, loading, onRefresh, branch, onRequestChange, getProductStock }) => {
-  const { user } = useUser();
+const InventoryList = ({ products, loading, onRefresh, onRequestChange, getProductStock }) => {
   const [pendingId, setPendingId] = React.useState('');
-  const [rowState, setRowState] = React.useState({});
-
-  const getRowState = (productId) => rowState[productId] || { quantity: '' };
-  const setRowValue = (productId, next) => {
-    setRowState((prev) => ({
-      ...prev,
-      [productId]: { ...getRowState(productId), ...next },
-    }));
-  };
 
   const getStockDisplay = (product) => {
     if (getProductStock) {
       return getProductStock(product);
     }
     return product.stock || 0;
-  };
-
-  const updateStock = async (productId) => {
-    const { quantity } = getRowState(productId);
-    const qty = Number(quantity);
-    if (!qty || qty <= 0) return;
-    try {
-      setPendingId(productId);
-      await apiRequest(`/products/${productId}/stock`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          action: 'add',
-          quantity: qty,
-        }),
-      });
-      appendAuditLog({
-        user: user?.email || user?.name || 'admin',
-        action: 'update_inventory_stock',
-        details: `Product ${productId} stock action=add qty=${qty}`,
-      });
-      setRowValue(productId, { quantity: '' });
-      onRefresh?.();
-    } catch (error) {
-      alert(error.message || 'Unable to update stock');
-    } finally {
-      setPendingId('');
-    }
   };
 
 
@@ -69,7 +29,7 @@ const InventoryList = ({ products, loading, onRefresh, branch, onRequestChange, 
             <th>SKU</th>
             <th>Stock</th>
             <th>Price</th>
-            <th>Add Stock</th>
+            <th>Stock Validation</th>
             {onRequestChange && <th>Manager Actions</th>}
           </tr>
         </thead>
@@ -85,20 +45,10 @@ const InventoryList = ({ products, loading, onRefresh, branch, onRequestChange, 
                 <span className="stock-badge">{getStockDisplay(product)}</span>
               </td>
               <td>PHP {product.price}</td>
-              <td style={{ minWidth: 210 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    min="1"
-                    value={getRowState(product.id).quantity}
-                    onChange={(event) => setRowValue(product.id, { quantity: event.target.value })}
-                    placeholder="Qty"
-                    style={{ width: 70 }}
-                  />
-                  <button type="button" onClick={() => updateStock(product.id)} disabled={pendingId === product.id}>
-                    {pendingId === product.id ? 'Adding...' : 'Add'}
-                  </button>
-                </div>
+              <td style={{ minWidth: 160 }}>
+                <button type="button" onClick={() => onAddStock?.(product)} disabled={pendingId === product.id}>
+                  {pendingId === product.id ? 'Preparing...' : 'Add Stock'}
+                </button>
               </td>
 
               {onRequestChange && (

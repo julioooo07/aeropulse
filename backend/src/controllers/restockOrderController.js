@@ -1,9 +1,10 @@
 const RestockOrder = require("../models/RestockOrder");
 const Product = require("../models/Product");
-const Notification = require("../models/Notification");
 const AuditLog = require("../models/AuditLog");
+const InventoryTransaction = require("../models/InventoryTransaction");
 const User = require("../models/User");
 const { BRANCHES } = require("../domain/branchRouting");
+const { notifyUsersByRoles } = require("../domain/notificationHelper");
 
 /**
  * Owner creates a restock order
@@ -13,7 +14,7 @@ const createRestockOrder = async (req, res) => {
     return res.status(403).json({ message: "Only owners can create restock orders" });
   }
 
-  const { supplier, branches, products, expectedDeliveryStart, expectedDeliveryEnd, notes } = req.body;
+  const { supplier, branches, products, expectedDeliveryStart, expectedDeliveryEnd, notes, trackingNumber, deliveryCompany, deliveredBy } = req.body;
 
   if (!supplier?.name || !branches?.length || !products?.length) {
     return res.status(400).json({ message: "Supplier, branches, and products are required" });
@@ -51,6 +52,9 @@ const createRestockOrder = async (req, res) => {
       expectedDeliveryStart: startDate,
       expectedDeliveryEnd: endDate,
       createdBy: req.authUser._id,
+      trackingNumber: String(trackingNumber || "").trim(),
+      deliveryCompany: String(deliveryCompany || "").trim(),
+      deliveredBy: String(deliveredBy || "").trim(),
       notes: notes?.trim() || "",
       status: "pending_signal",
     });
@@ -117,18 +121,17 @@ const signalRestockOrder = async (req, res) => {
       return `${s} - ${e}`;
     };
 
-    const notificationPromises = managers.map((manager) =>
-      Notification.create({
-        user: manager._id,
-        type: "system",
-        title: "Restock Incoming",
-        message: `Restock from ${restockOrder.supplier.name} expected ${formatDateRange(
-          restockOrder.expectedDeliveryStart,
-          restockOrder.expectedDeliveryEnd
-        )}. ${restockOrder.products.length} product(s)`,
-      })
-    );
-    await Promise.all(notificationPromises);
+    await notifyUsersByRoles({
+      roles: ["admin"],
+      title: "Restock Incoming",
+      message: `Restock from ${restockOrder.supplier.name} expected ${formatDateRange(
+        restockOrder.expectedDeliveryStart,
+        restockOrder.expectedDeliveryEnd
+      )}. ${restockOrder.products.length} product(s)`,
+      actionUrl: "/admin/inventory",
+      entityType: "restock_order",
+      entityId: String(restockOrder._id),
+    });
 
     return res.json({ restockOrder: restockOrder.toJSON() });
   } catch (error) {
@@ -145,7 +148,7 @@ const markRestockReceived = async (req, res) => {
   }
 
   const { id } = req.params;
-  const { receivedProducts } = req.body || {};
+  const { receivedProducts, trackingNumber, deliveryCompany, deliveredBy, deliveryDate, notes } = req.body || {};
 
   const restockOrder = await RestockOrder.findById(id);
   if (!restockOrder) {
@@ -156,17 +159,41 @@ const markRestockReceived = async (req, res) => {
     return res.status(400).json({ message: "Only incoming orders can be marked as received" });
   }
 
+  if (!String(trackingNumber || "").trim()) {
+    return res.status(400).json({ message: "Tracking order number is required" });
+  }
+  if (!String(deliveryCompany || "").trim()) {
+    return res.status(400).json({ message: "Delivery company is required" });
+  }
+  if (!String(deliveredBy || "").trim()) {
+    return res.status(400).json({ message: "Delivered by is required" });
+  }
+  const parsedDeliveryDate = deliveryDate ? new Date(deliveryDate) : null;
+  if (!parsedDeliveryDate || Number.isNaN(parsedDeliveryDate.getTime())) {
+    return res.status(400).json({ message: "Valid delivery date is required" });
+  }
+
   try {
-    // Update received quantities
-    if (Array.isArray(receivedProducts)) {
-      for (const received of receivedProducts) {
-        const productEntry = restockOrder.products.find(
-          (p) => p.product.toString() === received.productId
-        );
-        if (productEntry) {
-          productEntry.receivedQuantity = received.quantity;
-        }
+    // Update received quantities and validate received values
+    if (!Array.isArray(receivedProducts) || receivedProducts.length === 0) {
+      return res.status(400).json({ message: "At least one received product is required" });
+    }
+
+    for (const received of receivedProducts) {
+      const productEntry = restockOrder.products.find(
+        (p) => p.product.toString() === received.productId
+      );
+      const quantityValue = Number(received.quantity);
+      if (!productEntry) {
+        return res.status(400).json({ message: `Invalid product ${received.productId}` });
       }
+      if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+        return res.status(400).json({ message: `Received quantity must be a positive number for product ${productEntry.product}` });
+      }
+      if (quantityValue > productEntry.quantity) {
+        return res.status(400).json({ message: `Received quantity for ${productEntry.product} cannot exceed ordered quantity` });
+      }
+      productEntry.receivedQuantity = quantityValue;
     }
 
     // Update inventory
@@ -184,39 +211,63 @@ const markRestockReceived = async (req, res) => {
         product.stock = Array.from(product.branchStock.values()).reduce((sum, val) => sum + val, 0);
         await product.save();
 
+        const inventoryTransaction = await InventoryTransaction.create({
+          actionType: "restock_receipt",
+          restockOrder: restockOrder._id,
+          product: product._id,
+          branch: req.activeBranch || "",
+          user: req.authUser._id,
+          quantity: receivedQty,
+          referenceType: "restock_order",
+          referenceNumber: String(trackingNumber || "").trim() || String(restockOrder._id),
+          relatedEntityType: "RestockOrder",
+          relatedEntityId: restockOrder._id,
+          trackingNumber: String(trackingNumber || "").trim(),
+          deliveryCompany: String(deliveryCompany || "").trim(),
+          deliveredBy: String(deliveredBy || "").trim(),
+          receivedBy: req.authUser._id,
+          deliveryDate: parsedDeliveryDate,
+          notes: String(notes || "").trim(),
+          supplierName: String(restockOrder.supplier?.name || "").trim(),
+          productName: String(product.name || "").trim(),
+        });
+
         // Create audit log for each product
         await AuditLog.create({
-          action: "restock_order_received",
+          action: "inventory_transaction_created",
           user: req.authUser._id,
           branch: req.activeBranch,
-          entityType: "restock_order",
-          entityId: restockOrder._id,
+          entityType: "inventory_transaction",
+          entityId: inventoryTransaction._id,
           changeDetails: {
+            before: { quantity: productEntry.quantity },
             after: { quantity: receivedQty, branches: restockOrder.branches },
           },
-          description: `Received ${receivedQty} units of ${product.name} for ${restockOrder.branches.join(", ")}`,
+          description: `Recorded inventory receipt of ${receivedQty} units of ${product.name} from ${restockOrder.supplier.name}`,
           ipAddress: req.ip,
         });
       }
     }
 
-    // Update order status
+    // Update order status and receipt metadata
     restockOrder.status = "received";
     restockOrder.receivedAt = new Date();
     restockOrder.receivedBy = req.authUser._id;
-    restockOrder.actualDeliveryDate = new Date();
+    restockOrder.actualDeliveryDate = parsedDeliveryDate;
+    restockOrder.trackingNumber = String(trackingNumber || "").trim();
+    restockOrder.deliveryCompany = String(deliveryCompany || "").trim();
+    restockOrder.deliveredBy = String(deliveredBy || "").trim();
+    restockOrder.notes = String(notes || restockOrder.notes || "").trim();
     await restockOrder.save();
 
-    // Notify owner
-    const owner = await User.findOne({ role: "superadmin" });
-    if (owner) {
-      await Notification.create({
-        user: owner._id,
-        type: "system",
-        title: "Restock Received",
-        message: `Restock from ${restockOrder.supplier.name} has been received at ${req.activeBranch}`,
-      });
-    }
+    await notifyUsersByRoles({
+      roles: ["superadmin"],
+      title: "Restock Received",
+      message: `Restock from ${restockOrder.supplier.name} has been received at ${req.activeBranch}.`,
+      actionUrl: "/superadmin/inventory",
+      entityType: "restock_order",
+      entityId: String(restockOrder._id),
+    });
 
     return res.json({ restockOrder: restockOrder.toJSON() });
   } catch (error) {

@@ -1,8 +1,10 @@
 const InventoryChangeRequest = require("../models/InventoryChangeRequest");
 const AuditLog = require("../models/AuditLog");
+const InventoryTransaction = require("../models/InventoryTransaction");
 const Product = require("../models/Product");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+const { recordAdjustment } = require("../services/inventorySyncService");
 
 /**
  * Manager creates a change request for inventory
@@ -152,19 +154,10 @@ const approveRequest = async (req, res) => {
     request.approvedAt = new Date();
     await request.save();
 
-    // Create audit log
-    await AuditLog.create({
-      action: "inventory_change_approved",
-      user: req.authUser._id,
+    await recordAdjustment(request.product, oldStock, request.requestedStock, {
       branch: request.branch,
-      entityType: "inventory_change_request",
-      entityId: request._id,
-      changeDetails: {
-        before: { stock: oldStock },
-        after: { stock: request.requestedStock },
-      },
-      description: `Approved inventory change for ${product.name} at ${request.branch}: ${oldStock} → ${request.requestedStock}`,
-      ipAddress: req.ip,
+      userId: req.authUser._id,
+      reason: request.reason || `Inventory adjustment approved for ${product.name}`,
     });
 
     // Notify manager

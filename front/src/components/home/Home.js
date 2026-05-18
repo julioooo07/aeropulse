@@ -83,6 +83,12 @@ function Home() {
         const currentIds = new Set(normalized.map((n) => n.id));
         setNotifications(normalized);
         previousNotificationIdsRef.current = currentIds;
+        // persist seen IDs so alerts won't repeat when the user revisits the page
+        try {
+          localStorage.setItem('seenNotificationIds', JSON.stringify(Array.from(currentIds)));
+        } catch (e) {
+          // ignore storage errors
+        }
       })
       .catch(() => setNotifications([]));
   }, [isAuthenticated]);

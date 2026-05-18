@@ -1,7 +1,51 @@
 /* ============================================
-   SUPER ADMIN DASHBOARD — Shared styles are defined in superAdminShared.css
-   Dashboard-specific overrides are intentionally minimal.
+   SUPER ADMIN DASHBOARD — Dashboard-specific styles
+   Shared base: superAdminShared.css
    ============================================ */
 
-/* Dashboard-specific styles are not required here because the shared Super Admin stylesheet provides the
-   unified cards, grids, tables, buttons, and layout styles used across all Super Admin screens. */
+/* ---- Executive Notes / Profile rows ---- */
+.super-card .exec-profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--super-bg);
+  border: 1px solid var(--super-border-soft);
+  font-size: 13px;
+  color: var(--super-text-secondary);
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.super-card .exec-profile-row:hover {
+  background: var(--super-primary-softer);
+  border-color: var(--super-border-accent);
+}
+
+.super-card .exec-profile-row strong {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--super-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Dashboard stat card decorative accent circle */
+.super-grid > .super-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.super-grid > .super-card::after {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  right: -20px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: var(--super-primary-softer);
+  pointer-events: none;
+}

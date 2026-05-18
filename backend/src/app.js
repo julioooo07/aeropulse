@@ -21,6 +21,8 @@ const inventoryChangeRequestRoutes = require("./routes/inventoryChangeRequestRou
 const restockOrderRoutes = require("./routes/restockOrderRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const inventoryAlertRoutes = require("./routes/inventoryAlertRoutes");
+const { handleValidationError } = require("./middleware/validation");
 
 const app = express();
 
@@ -67,9 +69,11 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/inventory-change-requests", inventoryChangeRequestRoutes);
+app.use("/api/inventory-alerts", inventoryAlertRoutes);
 app.use("/api/restock-orders", restockOrderRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/ai", aiRoutes);
+app.use(handleValidationError);
 
 const buildPath = path.resolve(__dirname, "..", "..", "front", "build");
 const indexHtml = path.join(buildPath, "index.html");

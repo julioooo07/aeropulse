@@ -20,7 +20,7 @@ const links = [
   { to: "/superadmin/alerts", label: "Customer Alerts", icon: WarningCircle },
 ];
 
-const SuperAdminSidebar = ({ isOpen, onClose }) => {
+const SuperAdminSidebar = () => {
   const navigate = useNavigate();
   const { logout } = useUser();
 
@@ -42,6 +42,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
           {"\u2715"}
         </button>
       </div>
+
       <nav className="super-nav">
         {links.map((link) => (
           <NavLink

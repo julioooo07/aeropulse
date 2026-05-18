@@ -1,5 +1,6 @@
 const Order = require("../models/Order");
 const AuditLog = require("../models/AuditLog");
+const InventoryTransaction = require("../models/InventoryTransaction");
 
 const parseDate = (value) => {
   if (!value) return null;
@@ -171,5 +172,82 @@ const getAuditLogs = async (req, res) => {
   }
 };
 
-module.exports = { getSalesReport, getAuditLogs };
+const getInventoryTransactions = async (req, res) => {
+  try {
+    const from = parseDate(req.query.from) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = parseDate(req.query.to) || new Date();
+    const productFilter = String(req.query.product || "").trim();
+    const supplierFilter = String(req.query.supplier || "").trim();
+    const identifierFilter = String(req.query.trackingNumber || "").trim();
+    const actionFilter = String(req.query.actionType || "").trim();
+    const branchFilter = String(req.query.branch || "").trim();
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 100));
+    const skip = Math.max(0, Number(req.query.skip) || 0);
+
+    const match = {
+      createdAt: { $gte: from, $lte: to },
+    };
+
+    if (productFilter) {
+      match.productName = { $regex: productFilter, $options: "i" };
+    }
+    if (supplierFilter) {
+      match.supplierName = { $regex: supplierFilter, $options: "i" };
+    }
+    if (identifierFilter) {
+      match.$or = [
+        { trackingNumber: { $regex: identifierFilter, $options: "i" } },
+        { referenceNumber: { $regex: identifierFilter, $options: "i" } },
+      ];
+    }
+    if (actionFilter) {
+      match.actionType = actionFilter;
+    }
+    if (branchFilter) {
+      match.branch = branchFilter;
+    }
+
+    const transactions = await InventoryTransaction.find(match)
+      .populate("user", "name email")
+      .populate("product", "name sku")
+      .populate("restockOrder", "supplier trackingNumber status")
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip)
+      .lean();
+
+    const total = await InventoryTransaction.countDocuments(match);
+
+    return res.json({
+      transactions: transactions.map((t) => ({
+        id: t._id.toString(),
+        actionType: t.actionType || "restock_receipt",
+        product: t.product ? `${t.product.name} (${t.product.sku})` : t.productName,
+        quantity: t.quantity,
+        branch: t.branch,
+        reference: t.referenceNumber || t.trackingNumber || (t.restockOrder ? String(t.restockOrder.trackingNumber || "") : ""),
+        referenceType: t.referenceType || t.relatedEntityType || "",
+        supplier: t.supplierName,
+        trackingNumber: t.trackingNumber,
+        deliveryCompany: t.deliveryCompany,
+        deliveredBy: t.deliveredBy,
+        responsible: t.user ? `${t.user.name} (${t.user.email})` : "Unknown",
+        notes: t.notes,
+        restockOrderId: t.restockOrder ? String(t.restockOrder._id) : null,
+        status: t.restockOrder ? t.restockOrder.status : null,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      total,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      limit,
+      skip,
+    });
+  } catch (error) {
+    console.error("Failed to load inventory transactions:", error);
+    return res.status(500).json({ message: "Unable to load inventory transactions right now." });
+  }
+};
+
+module.exports = { getSalesReport, getAuditLogs, getInventoryTransactions };
 

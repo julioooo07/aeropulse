@@ -78,6 +78,13 @@ function SuperAdminDashboard() {
     }
   };
 
+  const profileRows = [
+    { label: 'Name', value: user?.name || 'Super Admin' },
+    { label: 'Email', value: user?.email || 'superadmin@aeropulse.com' },
+    { label: 'Phone', value: user?.phone || '—' },
+    { label: 'Address', value: user?.address || '—' },
+  ];
+
   return (
     <SuperAdminLayout
       title="Super Admin Command Center"
@@ -94,7 +101,7 @@ function SuperAdminDashboard() {
         </div>
         <div className="super-card">
           <h3>Latest Sales Branch</h3>
-          <strong>{stats.latestSalesBranch}</strong>
+          <strong style={{ fontSize: 18 }}>{stats.latestSalesBranch}</strong>
         </div>
         <div className="super-card">
           <h3>Admins</h3>
@@ -102,6 +109,7 @@ function SuperAdminDashboard() {
         </div>
       </div>
 
+      {/* Controls + Notes */}
       <div className="super-grid-2">
         <div className="super-card">
           <h2>Boss Controls</h2>
@@ -145,6 +153,7 @@ function SuperAdminDashboard() {
             </button>
           </div>
         </div>
+
         <div className="super-card">
           <h2>Executive Notes</h2>
           <p>
@@ -170,6 +179,8 @@ function SuperAdminDashboard() {
           </ul>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
       {isEditing && (
         <div className="app-modal-overlay" onClick={() => setIsEditing(false)}>
           <form

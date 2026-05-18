@@ -1,6 +1,8 @@
 const Product = require("../models/Product");
+const InventoryTransaction = require("../models/InventoryTransaction");
 const { BRANCHES } = require("../domain/branchRouting");
 const { validateProductUniqueness } = require("../utils/productValidation");
+const { notifyUsersByRoles } = require("../domain/notificationHelper");
 
 const SAMPLE_PRODUCTS = [
   {
@@ -669,6 +671,29 @@ const restockProduct = async (req, res) => {
   product.stock = summedStock;
   await product.save();
 
+  await InventoryTransaction.create({
+    actionType: "stock_addition",
+    product: product._id,
+    branch: req.authUser.role === "superadmin" ? branch || "" : req.activeBranch,
+    user: req.authUser._id,
+    quantity: qty,
+    referenceType: "product_restock",
+    referenceNumber: String(product.sku || product.name || ""),
+    relatedEntityType: "product",
+    relatedEntityId: product._id,
+    notes: `Manual stock addition for ${product.name}`,
+    productName: product.name,
+  });
+
+  await notifyUsersByRoles({
+    roles: ["admin", "superadmin"],
+    title: "Stock added",
+    message: `Stock for ${product.name} has been increased by ${qty} unit(s) in ${req.authUser.role === "superadmin" ? branch || "all branches" : req.activeBranch}.`,
+    actionUrl: "/admin/inventory",
+    entityType: "product",
+    entityId: String(product._id),
+  });
+
   return res.json({ product: toRoleAwareProduct(product, req) });
 };
 
@@ -676,7 +701,17 @@ const updateBranchStock = async (req, res) => {
   if (!requireAdmin(req, res)) return null;
 
   const { productId } = req.params;
-  const { branch, action = "set", quantity = 0 } = req.body || {};
+  const {
+    branch,
+    action = "set",
+    quantity = 0,
+    addedByName = "",
+    deliveredByName = "",
+    deliveryCompany = "",
+    deliveryDate = null,
+    referenceNumber = "",
+    notes = "",
+  } = req.body || {};
 
   const product = await Product.findById(productId);
   if (!product) {
@@ -711,6 +746,41 @@ const updateBranchStock = async (req, res) => {
   );
   product.stock = summedStock;
   await product.save();
+
+  await InventoryTransaction.create({
+    actionType: "stock_addition",
+    product: product._id,
+    branch: scopedBranch,
+    user: req.authUser._id,
+    quantity: qty,
+    referenceType: "stock_validation",
+    referenceNumber: String(referenceNumber || product.sku || product.name || ""),
+    relatedEntityType: "product",
+    relatedEntityId: product._id,
+    notes: [
+      `Branch stock addition for ${product.name}`,
+      notes?.trim() ? `Notes: ${notes.trim()}` : "",
+      addedByName?.trim() ? `Added by: ${addedByName.trim()}` : "",
+      deliveredByName?.trim() ? `Delivered by: ${deliveredByName.trim()}` : "",
+      deliveryCompany?.trim() ? `Delivery company: ${deliveryCompany.trim()}` : "",
+      referenceNumber?.trim() ? `Reference number: ${referenceNumber.trim()}` : "",
+      deliveryDate ? `Delivery date: ${new Date(deliveryDate).toISOString()}` : "",
+    ].filter(Boolean).join(" | "),
+    addedByName: String(addedByName || "").trim(),
+    deliveredByName: String(deliveredByName || "").trim(),
+    deliveryCompany: String(deliveryCompany || "").trim(),
+    deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+    productName: product.name,
+  });
+
+  await notifyUsersByRoles({
+    roles: ["admin", "superadmin"],
+    title: "Stock added",
+    message: `Stock for ${product.name} has been increased by ${qty} unit(s) in ${scopedBranch}.`,
+    actionUrl: "/admin/inventory",
+    entityType: "product",
+    entityId: String(product._id),
+  });
 
   return res.json({ product: toRoleAwareProduct(product, req) });
 };
