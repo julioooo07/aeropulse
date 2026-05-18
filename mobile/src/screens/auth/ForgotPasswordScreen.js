@@ -3,6 +3,7 @@ import { Button, Text, TextInput } from "react-native-paper";
 import Screen from "../../components/Screen";
 import { ErrorBanner } from "../../components/StateViews";
 import { AuthApi } from "../../services/api";
+import { validateForgotPasswordForm } from "../../utils/validators";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
@@ -14,8 +15,16 @@ export default function ForgotPasswordScreen() {
     setBusy(true);
     setError("");
     setMessage("");
+
+    const validation = validateForgotPasswordForm(email.trim());
+    if (!validation.valid) {
+      setError(validation.errors.email);
+      setBusy(false);
+      return;
+    }
+
     try {
-      const result = await AuthApi.forgotPassword(email);
+      const result = await AuthApi.forgotPassword(email.trim());
       setMessage(result.message || "Please check your email for reset instructions.");
     } catch (err) {
       setError(err.message);
@@ -28,8 +37,17 @@ export default function ForgotPasswordScreen() {
     <Screen>
       <ErrorBanner message={error} />
       {message ? <Text>{message}</Text> : null}
-      <TextInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" mode="outlined" />
-      <Button mode="contained" loading={busy} onPress={submit}>Send reset link</Button>
+      <TextInput
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        mode="outlined"
+      />
+      <Button mode="contained" loading={busy} onPress={submit}>
+        Send reset link
+      </Button>
     </Screen>
   );
 }

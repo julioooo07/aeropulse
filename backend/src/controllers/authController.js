@@ -496,9 +496,10 @@ const login = async (req, res) => {
   const { identifier, password } = req.body;
   try {
     const normalizedIdentifier = normalizeIdentifier(identifier);
-    // STRICT ALIAS LOGIN: Email is excluded to prioritize technical identity
+    const normalizedEmail = normalizeEmail(identifier);
     const user = await User.findOne({
       $or: [
+        { email: normalizedEmail },
         { phone: normalizePhone(identifier) },
         { alias: normalizedIdentifier },
         { username: normalizedIdentifier },
@@ -562,9 +563,9 @@ const updateCart = async (req, res) => {
 };
 
 const me = async (req, res) => {
-  const user = await User.findById(req.user.sub);
+  const user = req.authUser;
   if (!user) return res.status(404).json({ message: "User not found" });
-  res.json(user);
+  res.json({ user });
 };
 
 const requestPasswordReset = async (req, res) => {

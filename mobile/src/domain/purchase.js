@@ -17,6 +17,55 @@ export function computePurchaseTotals({ subtotal, serviceAreaId, discountAmount 
   return { subtotal, vatAmount, deliveryFee, discountAmount, total };
 }
 
+export function computeStockIssues(cart = [], products = []) {
+  const byId = new Map(
+    products.map((p) => [String(p.id || p._id || ""), Number(p.stock || 0)])
+  );
+  const bySku = new Map(
+    products
+      .map((p) => [String(p.sku || p.model || ""), Number(p.stock || 0)])
+      .filter(([sku]) => Boolean(sku))
+  );
+
+  const issues = [];
+  for (const item of cart) {
+    const idKey = String(item.id || "");
+    const skuKey = String(item.sku || item.model || "");
+    const available = byId.has(idKey)
+      ? byId.get(idKey)
+      : bySku.has(skuKey)
+      ? bySku.get(skuKey)
+      : null;
+
+    if (available === null) continue;
+
+    const desired = Number(item.quantity || 0);
+    const normalizedAvailable = Number.isFinite(available)
+      ? Math.max(0, Math.floor(available))
+      : 0;
+
+    if (normalizedAvailable <= 0) {
+      issues.push({
+        id: idKey,
+        name: item.name,
+        desired,
+        available: 0,
+        code: "out_of_stock"
+      });
+    } else if (desired > normalizedAvailable) {
+      issues.push({
+        id: idKey,
+        name: item.name,
+        desired,
+        available: normalizedAvailable,
+        code: "insufficient_stock"
+      });
+    }
+  }
+
+  return issues;
+}
+
 const normalize = (value = "") => String(value).trim().toLowerCase();
 
 export function resolvePreferredBranch(address = {}) {

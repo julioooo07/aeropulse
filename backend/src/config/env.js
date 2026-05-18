@@ -1,10 +1,16 @@
 const dotenv = require("dotenv");
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const parseCorsOrigins = (value = "") => {
   if (!value || !String(value).trim()) {
-    return ["http://localhost:3000", "http://localhost:8081"];
+    // Include common local dev ports used by the web frontend and Expo web
+    return [
+      "http://localhost:3000",
+      "http://localhost:8081",
+      "http://localhost:8082",
+      "http://localhost:8083",
+    ];
   }
   return String(value)
     .split(",")
@@ -16,9 +22,9 @@ const env = {
   port: process.env.PORT || 5000,
   mongoUri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/aeropulse",
   jwtSecret: process.env.JWT_SECRET || "dev-secret",
-  corsOrigin: parseCorsOrigins(
-    process.env.CORS_ORIGIN || "http://localhost:3000",
-  ),
+  // Use process.env.CORS_ORIGIN if provided; otherwise parseCorsOrigins will
+  // return a sensible default list for local development (includes common Expo ports).
+  corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
   openAiApiKey: process.env.OPENAI_API_KEY || "",
   openAiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
