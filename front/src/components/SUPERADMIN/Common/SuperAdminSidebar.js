@@ -20,7 +20,7 @@ const links = [
   { to: "/superadmin/alerts", label: "Customer Alerts", icon: WarningCircle },
 ];
 
-const SuperAdminSidebar = () => {
+const SuperAdminSidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { logout } = useUser();
 

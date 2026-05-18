@@ -1,7 +1,7 @@
 import React from 'react';
 import './styles.css';
 
-const InventoryList = ({ products, loading, onRefresh, onRequestChange, getProductStock }) => {
+const InventoryList = ({ products, loading, onRefresh, onRequestChange, onAddStock, getProductStock }) => {
   const [pendingId, setPendingId] = React.useState('');
 
   const getStockDisplay = (product) => {
