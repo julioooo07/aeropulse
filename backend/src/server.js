@@ -1,6 +1,10 @@
 // Load .env from the backend folder (one level up from src)
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "..", ".env"), override: true });
+const nodeEnv = process.env.NODE_ENV || "development";
+require("dotenv").config({
+  path: path.join(__dirname, "..", ".env"),
+  override: nodeEnv !== "production",
+});
 
 const app = require("./app");
 const env = require("./config/env");

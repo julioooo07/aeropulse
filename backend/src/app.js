@@ -28,6 +28,21 @@ const app = express();
 
 const normalizeOrigin = (value) => String(value || "").trim().replace(/\/+$/, "");
 
+const isTrustedDeployOrigin = (origin) => {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!["http:", "https:"].includes(protocol)) return false;
+
+    return (
+      hostname.endsWith(".onrender.com") ||
+      hostname.endsWith(".vercel.app") ||
+      hostname.endsWith(".netlify.app")
+    );
+  } catch (_error) {
+    return false;
+  }
+};
+
 app.use(helmet());
 app.use(
   cors({
@@ -56,11 +71,30 @@ app.use(
           .filter(Boolean),
       );
 
+      // If we're in production and nothing is configured, don't brick the API.
+      // Render domains and deployed frontends vary; allow all until env vars are set.
+      if (env.nodeEnv === "production" && allowed.size === 0) {
+        console.warn(
+          "[CORS] No allowed origins configured in production. " +
+            "Set FRONTEND_URL and/or CORS_ORIGIN. Temporarily allowing all origins.",
+        );
+        return callback(null, true);
+      }
+
       // Support "allow all" when explicitly configured (useful for quick Render fixes)
       if (allowed.has("*")) return callback(null, true);
 
       if (allowed.has(requestOrigin)) return callback(null, true);
-      return callback(new Error("Not allowed by CORS"));
+
+      // Render/Vercel/Netlify preview URLs can change between deploys.
+      // Trust those deploy hostnames so the API stays reachable after redeploys.
+      if (env.nodeEnv === "production" && isTrustedDeployOrigin(requestOrigin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS] Blocked origin: ${requestOrigin}`);
+      // Don't throw an Error (which becomes a 500 + stack trace). Just deny CORS.
+      return callback(null, false);
     },
     credentials: true,
   }),

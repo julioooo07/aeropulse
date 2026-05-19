@@ -1,32 +1,41 @@
 const dotenv = require("dotenv");
 
-dotenv.config({ override: true });
+const nodeEnv = process.env.NODE_ENV || "development";
+
+// Never let a checked-in .env override real production environment variables.
+// In local development, allow .env to override for convenience.
+dotenv.config({ override: nodeEnv !== "production" });
 
 const parseCorsOrigins = (value = "") => {
-  if (!value || !String(value).trim()) {
-    // Include common local dev ports used by the web frontend and Expo web
-    return [
-      "http://localhost:3000",
-      "http://localhost:8081",
-      "http://localhost:8082",
-      "http://localhost:8083",
-    ];
+  const raw = String(value || "").trim();
+  if (!raw) {
+    // In production, require explicit config (Render/Vercel URLs vary).
+    // In development, allow common local dev ports used by the web frontend and Expo web.
+    return nodeEnv === "production"
+      ? []
+      : [
+          "http://localhost:3000",
+          "http://localhost:8081",
+          "http://localhost:8082",
+          "http://localhost:8083",
+        ];
   }
-  return String(value)
+  return raw
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 };
 
 const env = {
-  nodeEnv: process.env.NODE_ENV || "development",
+  nodeEnv,
   port: process.env.PORT || 5000,
   mongoUri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/aeropulse",
   jwtSecret: process.env.JWT_SECRET || "dev-secret",
   // Use process.env.CORS_ORIGIN if provided; otherwise parseCorsOrigins will
   // return a sensible default list for local development (includes common Expo ports).
   corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+  frontendUrl:
+    process.env.FRONTEND_URL || (nodeEnv === "production" ? "" : "http://localhost:3000"),
   openAiApiKey: process.env.OPENAI_API_KEY || "",
   openAiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   openAiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
